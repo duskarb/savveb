@@ -3,8 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>savveb</title>
-  <meta name="description" content="Save a website as a WACZ file and replay it anywhere.">
+  <title>savveb — save a website, replay it anywhere</title>
+  <meta name="description" content="savveb saves a whole website into one .wacz file with a single command, and replays it in any browser.">
+  <meta property="og:title" content="savveb">
+  <meta property="og:description" content="Save a website. Replay it anywhere.">
+  <meta property="og:url" content="https://duskarb.github.io/savveb/">
+  <meta property="og:image" content="https://duskarb.github.io/savveb/og.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!-- Loaded up front: the runtime registers its service worker on the window load event. -->
   <script src="replay/ui.js"></script>
   <style>
@@ -112,6 +119,22 @@
 
     .message { margin: auto; padding: 40px 16px; color: var(--muted); max-width: 560px; }
 
+    @media (max-width: 480px) {
+      .bar, .bar .links { gap: 10px; }
+    }
+    .lang { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-transform: uppercase; cursor: pointer; }
+    .lang:hover { background: var(--mark); }
+    .home footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .home .lede { font-size: 16px; color: var(--muted); margin-top: 12px; }
+
     #stage { position: relative; }
     .loader {
       position: absolute;
@@ -148,49 +171,63 @@
     <span class="links">
       <a id="original" href="#" target="_blank" rel="noopener" hidden>Original</a>
       <a id="download" href="#" download hidden>Download</a>
+      <button class="lang" id="lang" type="button" lang="ko">한국어</button>
       <a href="https://github.com/duskarb/savveb" id="github">GitHub</a>
     </span>
   </header>
 
   <main class="frame" id="frame">
     <div class="home" id="home">
-      <h1>Save a website.<br>Replay it anywhere.</h1>
+      <div>
+        <h1 data-i18n-html="title">Save a website.<br>Replay it anywhere.</h1>
+        <p class="lede" data-i18n="lede">One command saves a whole site into a single .wacz file. Open it here, any time.</p>
+      </div>
 
       <section aria-labelledby="replay-heading">
-        <h2 id="replay-heading">Replay</h2>
+        <h2 id="replay-heading" data-i18n="replay">Replay</h2>
         <label class="drop" id="drop">
           <input id="file" type="file" accept=".wacz,.warc,.gz">
-          <span>Drop a .wacz file here, or click to choose</span>
+          <span data-i18n="drop">Drop a .wacz file here, or click to choose</span>
         </label>
         <form id="url-form">
-          <input id="url-input" type="url" placeholder="…or paste the URL of a .wacz file" required>
-          <button type="submit">Open</button>
+          <input id="url-input" type="url" placeholder="…or paste the URL of a .wacz file" data-i18n-placeholder="paste" required>
+          <button type="submit" data-i18n="open">Open</button>
         </form>
-        <p>Files open in your browser and are never uploaded. Any WACZ or WARC works, including
-          ones made with other web-archive tools. <a href="?source=demo/example.wacz">Try a demo.</a></p>
+        <p data-i18n-html="replayNote">Files open in your browser and are never uploaded. Any WACZ or WARC works,
+          including ones made with other web-archive tools.</p>
+        <p><a href="?source=demo/yeonamkyu.com.wacz&amp;url=https%3A%2F%2Fwww.yeonamkyu.com%2Fworks&amp;title=yeonamkyu.com"
+          data-i18n="demo">Try a demo: yeonamkyu.com, 52 pages saved with savveb →</a></p>
       </section>
 
       <section aria-labelledby="save-heading">
-        <h2 id="save-heading">Save</h2>
-        <p>Give it a URL and it visits the whole site on its own — links, sitemap, and the menu
-          buttons of single-page apps — in a real browser, so JavaScript-heavy sites come out right.
+        <h2 id="save-heading" data-i18n="save">Save</h2>
+        <p data-i18n-html="saveNote">Give it a URL and it visits the whole site on its own — links, sitemap, and the
+          menu buttons of single-page apps — in a real browser, so JavaScript-heavy sites come out right.
           Runs on your computer; needs Python 3.9+ and <a href="https://pipx.pypa.io/">pipx</a>.</p>
         <div class="step">
-          <span>1. Install once <small>(no pipx? <code>brew install pipx</code> or <code>python3 -m pip install --user pipx</code>, then <code>pipx ensurepath</code>)</small></span>
-          <div class="cmd"><code>pipx install git+https://github.com/duskarb/savveb</code><button type="button">Copy</button></div>
-          <span><small>Already installed? Update with <code>pipx reinstall savveb</code></small></span>
+          <span data-i18n-html="step1">1. Install once <small>(no pipx? <code>brew install pipx</code> or
+            <code>python3 -m pip install --user pipx</code>, then <code>pipx ensurepath</code>)</small></span>
+          <div class="cmd"><code>pipx install git+https://github.com/duskarb/savveb</code><button type="button" data-i18n="copy">Copy</button></div>
+          <span data-i18n-html="update"><small>Already installed? Update with <code>pipx reinstall savveb</code></small></span>
         </div>
         <div class="step">
-          <span>2. Save your site — you get one .wacz file</span>
-          <div class="cmd"><code>savveb save https://your-site.example/</code><button type="button">Copy</button></div>
+          <span data-i18n="step2">2. Save your site — you get one .wacz file</span>
+          <div class="cmd"><code>savveb save https://your-site.example/</code><button type="button" data-i18n="copy">Copy</button></div>
         </div>
         <div class="step">
-          <span>3. Drop the file above, or replay it offline</span>
-          <div class="cmd"><code>savveb play your-site.example-2026-01-01.wacz</code><button type="button">Copy</button></div>
+          <span data-i18n="step3">3. Drop the file above, or replay it offline</span>
+          <div class="cmd"><code>savveb play your-site.example-2026-01-01.wacz</code><button type="button" data-i18n="copy">Copy</button></div>
         </div>
-        <p>To link to an archive you've published, add <code>?source=</code> and the .wacz URL to
-          this page's address.</p>
+        <p data-i18n-html="linkNote">To link to an archive you've published, add <code>?source=</code> and the .wacz URL
+          to this page's address.</p>
       </section>
+
+      <footer>
+        <span data-i18n="footer">Open source (MIT)</span>
+        <a href="https://github.com/duskarb/savveb">GitHub</a>
+        <a href="https://github.com/duskarb/savveb#readme" data-i18n="docs">Docs</a>
+        <span data-i18n-html="credit">Replay by <a href="https://replayweb.page">ReplayWeb.page</a></span>
+      </footer>
     </div>
 
     <!-- The player element must exist before the page finishes loading, or the runtime
@@ -207,6 +244,78 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const params = new URLSearchParams(location.search);
+
+    const TEXT = {
+      en: {
+        title: "Save a website.<br>Replay it anywhere.",
+        lede: "One command saves a whole site into a single .wacz file. Open it here, any time.",
+        replay: "Replay", save: "Save", open: "Open", copy: "Copy", docs: "Docs",
+        drop: "Drop a .wacz file here, or click to choose",
+        paste: "…or paste the URL of a .wacz file",
+        replayNote: "Files open in your browser and are never uploaded. Any WACZ or WARC works, including ones made with other web-archive tools.",
+        demo: "Try a demo: yeonamkyu.com, 52 pages saved with savveb →",
+        saveNote: 'Give it a URL and it visits the whole site on its own — links, sitemap, and the menu buttons of single-page apps — in a real browser, so JavaScript-heavy sites come out right. Runs on your computer; needs Python 3.9+ and <a href="https://pipx.pypa.io/">pipx</a>.',
+        step1: '1. Install once <small>(no pipx? <code>brew install pipx</code> or <code>python3 -m pip install --user pipx</code>, then <code>pipx ensurepath</code>)</small>',
+        update: "<small>Already installed? Update with <code>pipx reinstall savveb</code></small>",
+        step2: "2. Save your site — you get one .wacz file",
+        step3: "3. Drop the file above, or replay it offline",
+        linkNote: "To link to an archive you've published, add <code>?source=</code> and the .wacz URL to this page's address.",
+        footer: "Open source (MIT)",
+        credit: 'Replay by <a href="https://replayweb.page">ReplayWeb.page</a>',
+        opening: "opening", slow: "big archives take a moment", again: "try another file",
+        failed: (why) => `couldn't open this file (${why}).`,
+        cors: "not reachable, or the server doesn't allow other sites to read it (CORS)",
+        other: "한국어", otherLang: "ko",
+      },
+      ko: {
+        title: "웹사이트를 보관하고,<br>어디서든 재생하세요.",
+        lede: "명령 한 줄로 사이트 전체를 .wacz 파일 하나에 담습니다. 언제든 여기서 열어 보세요.",
+        replay: "재생", save: "보관", open: "열기", copy: "복사", docs: "문서",
+        drop: ".wacz 파일을 여기에 끌어다 놓거나 눌러서 고르세요",
+        paste: "…또는 .wacz 파일 주소를 붙여 넣으세요",
+        replayNote: "파일은 브라우저 안에서만 열리고 업로드되지 않습니다. 다른 웹 아카이브 도구로 만든 WACZ·WARC도 열립니다.",
+        demo: "데모 보기: savveb로 저장한 yeonamkyu.com 52페이지 →",
+        saveNote: '주소만 주면 링크, sitemap, SPA의 메뉴 버튼까지 따라가며 사이트 전체를 실제 브라우저로 저장합니다. 그래서 JavaScript로 만든 사이트도 잘 담깁니다. 내 컴퓨터에서 실행하며, Python 3.9 이상과 <a href="https://pipx.pypa.io/">pipx</a>가 필요합니다.',
+        step1: '1. 한 번만 설치 <small>(pipx가 없다면 <code>brew install pipx</code> 또는 <code>python3 -m pip install --user pipx</code> 후 <code>pipx ensurepath</code>)</small>',
+        update: "<small>이미 설치했다면 <code>pipx reinstall savveb</code>로 업데이트</small>",
+        step2: "2. 사이트 보관 — .wacz 파일 하나가 생깁니다",
+        step3: "3. 위에 끌어다 놓거나, 오프라인으로 재생",
+        linkNote: "공개해 둔 아카이브로 링크를 걸려면 이 페이지 주소에 <code>?source=</code>와 .wacz 주소를 붙이세요.",
+        footer: "오픈 소스 (MIT)",
+        credit: '재생 엔진 <a href="https://replayweb.page">ReplayWeb.page</a>',
+        opening: "여는 중", slow: "큰 아카이브는 조금 걸려요", again: "다른 파일 열기",
+        failed: (why) => `이 파일을 열 수 없어요 (${why}).`,
+        cors: "접속할 수 없거나, 서버가 다른 사이트에서 읽는 것을 막고 있어요 (CORS)",
+        other: "English", otherLang: "en",
+      },
+    };
+
+    function pickLang() {
+      const asked = params.get("lang");
+      if (asked in TEXT) return asked;
+      try {
+        const saved = localStorage.getItem("savveb-lang");
+        if (saved in TEXT) return saved;
+      } catch {}
+      return (navigator.language || "").toLowerCase().startsWith("ko") ? "ko" : "en";
+    }
+    let lang = pickLang();
+    const t = (key) => TEXT[lang][key];
+
+    function applyLang() {
+      document.documentElement.lang = lang;
+      for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+      for (const el of document.querySelectorAll("[data-i18n-html]")) el.innerHTML = t(el.dataset.i18nHtml);
+      for (const el of document.querySelectorAll("[data-i18n-placeholder]")) el.placeholder = t(el.dataset.i18nPlaceholder);
+      $("lang").textContent = t("other");
+      $("lang").lang = t("otherLang");
+    }
+    $("lang").addEventListener("click", () => {
+      lang = t("otherLang");
+      try { localStorage.setItem("savveb-lang", lang); } catch {}
+      applyLang();
+    });
+    applyLang();
 
     function message(text) {
       $("frame").innerHTML = "";
@@ -242,8 +351,8 @@
           $("loader-text").innerHTML = "";
           const strong = document.createElement("strong");
           strong.textContent = name;
-          $("loader-text").append("opening ", strong, dots);
-          if (waited > 5000) $("loader-text").append(document.createElement("br"), "big archives take a moment");
+          $("loader-text").append(t("opening"), " ", strong, dots);
+          if (waited > 5000) $("loader-text").append(document.createElement("br"), t("slow"));
           tick += 1;
         };
         draw();
@@ -269,7 +378,7 @@
         $("loader-text").innerHTML = "";
         const again = document.createElement("a");
         again.href = "./";
-        again.textContent = "try another file";
+        again.textContent = t("again");
         $("loader-text").append(text, document.createElement("br"), again);
       },
     };
@@ -282,6 +391,7 @@
       $("title").textContent = title || "Archive";
       $("meta").textContent = meta;
       $("github").hidden = true;
+      $("lang").hidden = true;
       $("original").hidden = !url;
       if (url) $("original").href = url;
       $("download").hidden = !download;
@@ -305,9 +415,7 @@
           const response = await fetch(source, { headers: { Range: "bytes=0-0" } });
           if (!response.ok) throw new Error(`the server answered ${response.status}`);
         } catch (error) {
-          loader.fail(`couldn't open this file (${error.message === "Failed to fetch"
-            ? "not reachable, or the server doesn't allow other sites to read it (CORS)"
-            : error.message}).`);
+          loader.fail(t("failed")(error.message === "Failed to fetch" ? t("cors") : error.message));
           return;
         }
       }
@@ -364,11 +472,11 @@
         button.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(button.previousElementSibling.textContent);
-            button.textContent = "Copied";
+            button.textContent = lang === "ko" ? "복사됨" : "Copied";
           } catch {
-            button.textContent = "Select it";
+            button.textContent = lang === "ko" ? "직접 선택" : "Select it";
           }
-          setTimeout(() => { button.textContent = "Copy"; }, 1500);
+          setTimeout(() => { button.textContent = t("copy"); }, 1500);
         });
       }
     }

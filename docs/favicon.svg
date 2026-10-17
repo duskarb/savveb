@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .f { fill: #111; }
+    .b { fill: #fff; }
+    @media (prefers-color-scheme: dark) { .f { fill: #eee; } .b { fill: #111; } }
+  </style>
+  <!-- ʕ•ᴥ•ʔ -->
+  <circle class="f" cx="8" cy="9" r="5"/>
+  <circle class="f" cx="24" cy="9" r="5"/>
+  <circle class="f" cx="16" cy="18" r="12"/>
+  <circle class="b" cx="11.5" cy="16" r="2"/>
+  <circle class="b" cx="20.5" cy="16" r="2"/>
+  <ellipse class="b" cx="16" cy="22" rx="3" ry="2.2"/>
+</svg>

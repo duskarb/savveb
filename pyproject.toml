@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "savveb"
-version = "0.3.0"
+version = "0.3.1"
 description = "Save a website as a WACZ file and replay it anywhere."
 readme = "README.md"
 license = "MIT"
@@ -26,6 +26,9 @@ savveb = "savveb.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["savveb"]
 
-# The website in docs/ is also the local player, so ship it inside the package.
+# The website in docs/ is also the local player, so ship its player files inside the
+# package (not the demo archive or the link-preview image).
 [tool.hatch.build.targets.wheel.force-include]
-"docs" = "savveb/web"
+"docs/index.html" = "savveb/web/index.html"
+"docs/favicon.svg" = "savveb/web/favicon.svg"
+"docs/replay" = "savveb/web/replay"
