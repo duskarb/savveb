@@ -3,15 +3,17 @@
 Loads pages in Chromium (Playwright) and records every response. Rendering in a
 real browser means JavaScript-heavy sites replay well. Finds pages under the
 start URL's path from links, sitemap.xml and link-like buttons (single-page apps),
-within depth / page limit.
+within depth / page limit. Several tabs work in parallel.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import re
 import tempfile
+from collections import deque
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -75,21 +77,34 @@ def _optimize_image(content_type: str, body: bytes) -> tuple[bytes, str]:
     data = out.getvalue()
     return (data, new_ct) if len(data) < len(body) else (body, content_type)
 
-# Scroll to trigger lazy-loaded content, then return to the top.
+# Scroll down one screen at a time so lazy-loaded content anywhere on the page
+# loads, then return to the top. Stops at the bottom, or after ~10 seconds.
 _AUTOSCROLL = """
 async () => {
-  const step = () => new Promise(r => setTimeout(r, 250));
-  let last = -1;
-  for (let i = 0; i < 40; i++) {
-    window.scrollTo(0, document.body.scrollHeight);
-    await step();
-    const h = document.body.scrollHeight;
-    if (h === last) break;
-    last = h;
+  const pause = () => new Promise(r => setTimeout(r, 120));
+  const started = Date.now();
+  let y = 0;
+  while (Date.now() - started < 10000) {
+    y += window.innerHeight;
+    window.scrollTo(0, y);
+    await pause();
+    if (y + window.innerHeight >= document.documentElement.scrollHeight) {
+      await pause();
+      if (y + window.innerHeight >= document.documentElement.scrollHeight) break;
+    }
   }
   window.scrollTo(0, 0);
 }
 """
+
+
+async def _settle(page, timeout: int) -> None:
+    """Wait until the network goes quiet, but never longer than timeout ms
+    (sites with analytics or polling never go fully quiet)."""
+    try:
+        await page.wait_for_load_state("networkidle", timeout=timeout)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _scope_prefix(url: str) -> str:
@@ -108,8 +123,36 @@ _CLICKABLE = (
 )
 _MAX_CLICKS = 20
 
+# Ads, analytics and tracking: useless in an archive, so they are never downloaded.
+_TRACKERS = re.compile(
+    r"^https?://([^/]*\.)?("
+    r"google-analytics\.com|googletagmanager\.com|doubleclick\.net|googlesyndication\.com|"
+    r"googleadservices\.com|adservice\.google\.[a-z.]+|facebook\.net|connect\.facebook\.com|"
+    r"hotjar\.com|hotjar\.io|clarity\.ms|segment\.(io|com)|mixpanel\.com|amplitude\.com|"
+    r"plausible\.io|matomo\.cloud|newrelic\.com|nr-data\.net|fullstory\.com|"
+    r"analytics\.tiktok\.com|ads-twitter\.com|analytics\.twitter\.com|bat\.bing\.com|"
+    r"scorecardresearch\.com|quantserve\.com|criteo\.(com|net)|taboola\.com|outbrain\.com|"
+    r"wcs\.naver\.(net|com)|ssl\.pstatic\.net/tveta|analytics\.kakao\.com|analytics\.yahoo\.com|"
+    r"usefathom\.com|adsrvr\.org|adnxs\.com|rubiconproject\.com|pubmatic\.com|casalemedia\.com|"
+    r"openx\.net|bidswitch\.net|demdex\.net|everesttech\.net|adform\.net|smartadserver\.com"
+    r")/|/_vercel/(insights|speed-insights)/|/cdn-cgi/rum"
+)
 
-def _discover_routes(page, url: str, flush, tried: set[str]) -> list[str]:
+
+class _Fetched:
+    """A response fetched outside the page (e.g. a file the browser would download),
+    shaped like a Playwright response for _write_record."""
+
+    def __init__(self, response, body: bytes):
+        self.url = response.url
+        self.status = response.status
+        self.status_text = response.status_text
+        self.headers = response.headers
+        self.request = type("Request", (), {"method": "GET", "headers": {}})()
+        self.body = body
+
+
+async def _discover_routes(page, url: str, flush, tried: set[str]) -> list[str]:
     """Click link-like buttons; collect the addresses a single-page app moves to.
     Such apps change the address with JavaScript, so the pages never appear as links.
     flush() records what has loaded so far; it must run before navigating away,
@@ -118,41 +161,47 @@ def _discover_routes(page, url: str, flush, tried: set[str]) -> list[str]:
     found = []
     candidates = page.locator(_CLICKABLE)
     try:
-        count = min(candidates.count(), _MAX_CLICKS)
+        count = min(await candidates.count(), _MAX_CLICKS)
     except Exception:  # noqa: BLE001
         return found
     for index in range(count):
         try:
             target = candidates.nth(index)
-            if not target.is_visible():
+            if not await target.is_visible():
                 continue
-            label = target.evaluate("e => e.tagName + ':' + (e.textContent || '').trim().slice(0, 80)")
+            label = await target.evaluate("e => e.tagName + ':' + (e.textContent || '').trim().slice(0, 80)")
             if label in tried:
                 continue
             tried.add(label)
-            target.click(timeout=1500)
-            page.wait_for_timeout(500)
+            await target.click(timeout=1500)
+            await page.wait_for_timeout(400)
         except Exception:  # noqa: BLE001
             continue
         now = urldefrag(page.url).url
-        flush()
+        await flush()
         if now != url:
             found.append(now)
+            # Going back is instant for single-page apps; reload only if that fails.
             try:
-                page.goto(url, wait_until="load", timeout=45000)
-                page.wait_for_timeout(500)
+                await page.go_back(timeout=5000)
             except Exception:  # noqa: BLE001
-                break
+                pass
+            if urldefrag(page.url).url != url:
+                try:
+                    await page.goto(url, wait_until="load", timeout=45000)
+                except Exception:  # noqa: BLE001
+                    break
+            await page.wait_for_timeout(200)
     return found
 
 
-def _sitemap_urls(context, page_url: str) -> list[str]:
+async def _sitemap_urls(context, page_url: str) -> list[str]:
     parts = urlsplit(page_url)
     try:
-        response = context.request.get(f"{parts.scheme}://{parts.netloc}/sitemap.xml", timeout=15000)
+        response = await context.request.get(f"{parts.scheme}://{parts.netloc}/sitemap.xml", timeout=15000)
         if not response.ok:
             return []
-        return re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", response.text())
+        return re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", await response.text())
     except Exception:  # noqa: BLE001
         return []
 
@@ -184,18 +233,22 @@ def _write_record(writer: WARCWriter, response, body: bytes, content_type: str) 
     )
 
 
-def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, depth: int, log, progress):
-    from playwright.sync_api import sync_playwright
+async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, depth: int,
+                           parallel: int, log, progress):
+    from playwright.async_api import async_playwright
 
     # The scope is set from where each start URL ends up after redirects (e.g. adding www.).
     prefixes = [_scope_prefix(url) for url in seed_urls]
     seen_resources: set[str] = set()
+    fetching: set[str] = set()
+    refetch: set[str] = set()
     visited_pages: set[str] = set()
     pages: list[dict] = []
-    queue: list[tuple[str, int]] = [(urldefrag(url).url, 0) for url in seed_urls]
+    queue: deque[tuple[str, int]] = deque((urldefrag(url).url, 0) for url in seed_urls)
     queued = {url for url, _ in queue}
-    written = 0
-    saved = 0
+    checked_sitemaps: set[str] = set()
+    tried_buttons: set[str] = set()
+    counts = {"written": 0, "saved": 0, "started": 0, "busy": 0}
 
     def enqueue(target: str, level: int) -> None:
         target = urldefrag(target).url
@@ -206,113 +259,155 @@ def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, dep
     with open(warc_path, "wb") as stream:
         writer = WARCWriter(stream, gzip=True)
 
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
-            context = browser.new_context(
+        def report(current: str = "") -> None:
+            progress(len(pages), counts["written"], stream.tell(), current)
+
+        async def flush(pending: list) -> None:
+            """Write every response this tab has seen that is not recorded yet."""
+            batch = list(pending)
+            pending.clear()
+            for response in batch:
+                res_url = urldefrag(response.url).url
+                if not res_url.startswith(("http://", "https://")) or _TRACKERS.search(res_url):
+                    continue  # trackers reached through redirects are not blocked, so skip them here
+                if res_url in seen_resources or res_url in fetching:
+                    continue
+                fetching.add(res_url)
+                try:
+                    try:
+                        body = await response.body()
+                    except Exception:  # noqa: BLE001
+                        if not 300 <= response.status < 400:
+                            continue  # body not available now; record it if it loads again
+                        body = b""  # redirects have no body
+                    headers = await response.all_headers()
+                    if not body and 200 <= response.status < 300 and headers.get("content-length") != "0":
+                        # Prefetched or evicted responses can come back empty; fetch it again later.
+                        refetch.add(res_url)
+                        continue
+                    content_type = headers.get("content-type", "")
+                    original_len = len(body)
+                    if _OPTIMIZE and original_len >= _OPT_MIN_BYTES:
+                        body, content_type = await asyncio.to_thread(_optimize_image, content_type, body)
+                    counts["saved"] += original_len - len(body)
+                    try:
+                        _write_record(writer, response, body, content_type)
+                        counts["written"] += 1
+                        seen_resources.add(res_url)
+                    except Exception as error:  # noqa: BLE001
+                        log(f"    warn: {res_url} not recorded: {error}")
+                finally:
+                    fetching.discard(res_url)
+            report()
+
+        async def save_download(context, url: str) -> None:
+            """Fetch url directly and record it: files such as PDFs make the browser
+            download instead of showing a page, and some bodies never reach the page."""
+            if url in seen_resources:
+                return
+            try:
+                response = await context.request.get(url, timeout=60000)
+                fetched = _Fetched(response, await response.body())
+                _write_record(writer, fetched, fetched.body, response.headers.get("content-type", ""))
+                counts["written"] += 1
+                seen_resources.add(url)
+            except Exception as error:  # noqa: BLE001
+                log(f"       could not download {url}: {str(error).splitlines()[0]}")
+
+        async def visit(context, page, pending: list, url: str, level: int) -> None:
+            number = counts["started"]
+            log(f"  {number:>3}  {url}")
+            report(url)
+            page_title = url
+            try:
+                await page.goto(url, wait_until="load", timeout=45000)
+                await _settle(page, 1500)
+                await page.evaluate(_AUTOSCROLL)
+                await _settle(page, 1000)
+                page_title = await page.title() or url
+            except Exception as error:  # noqa: BLE001
+                if "Download is starting" in str(error):
+                    await save_download(context, url)
+                    page_title = url.rsplit("/", 1)[-1]
+                else:
+                    log(f"       could not fully load: {str(error).splitlines()[0]}")
+
+            landed = urldefrag(page.url).url
+            if landed != url:
+                visited_pages.add(landed)
+                queued.add(landed)
+                if level == 0 and not _in_scope(landed, prefixes):
+                    prefixes.append(_scope_prefix(landed))
+
+            origin = "{0.scheme}://{0.netloc}".format(urlsplit(landed))
+            if origin not in checked_sitemaps:
+                checked_sitemaps.add(origin)
+                for target in await _sitemap_urls(context, landed):
+                    enqueue(target, 1)
+
+            pages.append({
+                "id": hashlib.sha1(landed.encode()).hexdigest()[:16],
+                "url": landed,
+                "title": page_title,
+                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            })
+            await flush(pending)
+
+            if level < depth:
+                try:
+                    links = await page.eval_on_selector_all("a[href]", "els => els.map(e => e.href)")
+                except Exception:  # noqa: BLE001
+                    links = []
+                # Clicking also loads lazily fetched code; flush() records it.
+                links += await _discover_routes(page, landed, lambda: flush(pending), tried_buttons)
+                await flush(pending)
+                for link in links:
+                    enqueue(link, level + 1)
+
+        async def worker(context, page) -> None:
+            pending: list = []
+            page.on("response", lambda response: pending.append(response))
+            while counts["started"] < page_limit:
+                if not queue:
+                    if counts["busy"] == 0:
+                        return  # nothing left, and no other tab can find more
+                    await asyncio.sleep(0.1)
+                    continue
+                url, level = queue.popleft()
+                if url in visited_pages:
+                    continue
+                visited_pages.add(url)
+                counts["started"] += 1
+                counts["busy"] += 1
+                try:
+                    await visit(context, page, pending, url, level)
+                finally:
+                    counts["busy"] -= 1
+
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/149.0.0.0 Safari/537.36 savveb-playwright"
                 )
             )
-            page = context.new_page()
+            await context.route(_TRACKERS, lambda route: route.abort())
+            tabs = [await context.new_page() for _ in range(max(1, parallel))]
             # Buttons that open new tabs or windows are not followed.
-            context.on("page", lambda popup: popup.close() if popup != page else None)
-            pending = []
-            page.on("response", lambda response: pending.append(response))
-            checked_sitemaps: set[str] = set()
-            tried_buttons: set[str] = set()
-
-            def flush() -> None:
-                """Write every response seen so far that is not recorded yet."""
-                nonlocal written, saved
-                for response in list(pending):
-                    res_url = urldefrag(response.url).url
-                    if not res_url.startswith(("http://", "https://")) or res_url in seen_resources:
-                        continue
-                    try:
-                        body = response.body()
-                    except Exception:  # noqa: BLE001
-                        if not 300 <= response.status < 400:
-                            continue  # body not available now; record it if it loads again
-                        body = b""  # redirects have no body
-                    seen_resources.add(res_url)
-                    content_type = ""
-                    for key, value in response.headers.items():
-                        if key.lower() == "content-type":
-                            content_type = value
-                            break
-                    original_len = len(body)
-                    body, content_type = _optimize_image(content_type, body)
-                    saved += original_len - len(body)
-                    try:
-                        _write_record(writer, response, body, content_type)
-                        written += 1
-                    except Exception as error:  # noqa: BLE001
-                        log(f"    warn: {res_url} not recorded: {error}")
-                pending.clear()
-                progress(len(pages), written, stream.tell(), current)
-
-            current = ""
-            while queue and len(pages) < page_limit:
-                url, level = queue.pop(0)
-                if url in visited_pages:
-                    continue
-                visited_pages.add(url)
-
-                page_title = url
-                current = url
-                progress(len(pages), written, stream.tell(), url)
-                log(f"  {len(pages) + 1:>3}  {url}")
-                try:
-                    page.goto(url, wait_until="load", timeout=45000)
-                    page.wait_for_timeout(1200)
-                    page.evaluate(_AUTOSCROLL)
-                    page.wait_for_timeout(500)
-                    page_title = page.title() or url
-                except Exception as error:  # noqa: BLE001
-                    log(f"       could not fully load: {str(error).splitlines()[0]}")
-
-                landed = urldefrag(page.url).url
-                if landed != url:
-                    visited_pages.add(landed)
-                    queued.add(landed)
-                    if level == 0 and not _in_scope(landed, prefixes):
-                        prefixes.append(_scope_prefix(landed))
-
-                origin = "{0.scheme}://{0.netloc}".format(urlsplit(landed))
-                if origin not in checked_sitemaps:
-                    checked_sitemaps.add(origin)
-                    for target in _sitemap_urls(context, landed):
-                        enqueue(target, 1)
-
-                pages.append({
-                    "id": hashlib.sha1(landed.encode()).hexdigest()[:16],
-                    "url": landed,
-                    "title": page_title,
-                    "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                })
-                flush()
-
-                links = []
-                if level < depth:
-                    try:
-                        links = page.eval_on_selector_all(
-                            "a[href]", "els => els.map(e => e.href)"
-                        )
-                    except Exception:  # noqa: BLE001
-                        links = []
-                    # Clicking also loads lazily fetched code; flush() records it.
-                    links += _discover_routes(page, landed, flush, tried_buttons)
-                    flush()
-
-                for link in links:
-                    enqueue(link, level + 1)
-
-            browser.close()
+            context.on("page", lambda popup: None if popup in tabs else asyncio.ensure_future(popup.close()))
+            # The first tab finds the real address (redirects) before the others start.
+            first = asyncio.ensure_future(worker(context, tabs[0]))
+            while not pages and not first.done():
+                await asyncio.sleep(0.05)
+            await asyncio.gather(first, *(worker(context, tab) for tab in tabs[1:]))
+            for url in sorted(refetch - seen_resources):
+                await save_download(context, url)
+            await browser.close()
 
     left = len({u for u, _ in queue} - visited_pages)
-    return written, pages, saved, left
+    return counts["written"], pages, counts["saved"], left
 
 
 class BrowserMissing(RuntimeError):
@@ -320,7 +415,7 @@ class BrowserMissing(RuntimeError):
 
 
 def capture(seed_urls: list[str], out_path: Path, page_limit: int = 500, depth: int = 20,
-            log=print, progress=lambda *args: None) -> dict:
+            parallel: int = 4, log=print, progress=lambda *args: None) -> dict:
     """Capture one site, starting from seed_urls, into a WACZ at out_path.
     log(line) prints a line; progress(pages, files, bytes, url) reports where it is.
     Returns counts: pages, resources, saved (bytes), left (pages found but over the limit)."""
@@ -328,7 +423,8 @@ def capture(seed_urls: list[str], out_path: Path, page_limit: int = 500, depth: 
     with tempfile.TemporaryDirectory() as tmp:
         warc_path = Path(tmp) / "data.warc.gz"
         try:
-            count, pages, saved, left = _capture_to_warc(seed_urls, warc_path, page_limit, depth, log, progress)
+            count, pages, saved, left = asyncio.run(
+                _capture_to_warc(seed_urls, warc_path, page_limit, depth, parallel, log, progress))
         except Exception as error:  # noqa: BLE001
             if "Executable doesn't exist" in str(error):
                 raise BrowserMissing(str(error)) from error

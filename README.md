@@ -20,6 +20,8 @@ savveb save https://your-site.example/
 No pipx yet? `brew install pipx` (macOS) or `python3 -m pip install --user pipx`, then
 `pipx ensurepath` and open a new terminal.
 
+Update later with `pipx reinstall savveb`.
+
 You get `your-site.example-<date>.wacz` in the current folder. The first run asks
 to install Playwright's Chromium (~100 MB) once.
 
@@ -29,12 +31,15 @@ pages under the starting URL's path by following links, reading `sitemap.xml`, a
 clicking menu buttons that change the address (single-page apps built with React,
 Next.js and similar often have no ordinary links). If a page still gets missed, add
 its address: `savveb save https://site.example/ https://site.example/hidden-page`.
+Ads, analytics and trackers are skipped: they make saving slower and files bigger,
+and don't work in an archive anyway.
 
 | Option | Default | |
 |---|---|---|
 | `-o FILE` | `<site>-<date>.wacz` | where to write |
 | `--pages N` | 500 | most pages to save; savveb tells you if it found more |
 | `--depth N` | 20 | how many links deep to follow |
+| `--parallel N` | 4 | pages to load at once |
 | `--no-optimize` | off | keep large images as they are (by default images over 300 KB are downscaled to 2000 px) |
 
 ## Replay

@@ -18,6 +18,8 @@ savveb save https://내-사이트.example/
 pipx가 없으면 `brew install pipx`(macOS) 또는 `python3 -m pip install --user pipx`로 설치하고
 `pipx ensurepath` 후 터미널을 새로 연다.
 
+나중에 업데이트하려면 `pipx reinstall savveb`.
+
 현재 폴더에 `내-사이트.example-<날짜>.wacz`가 생긴다. 처음 실행할 때 Playwright용
 Chromium(약 100MB)을 한 번 설치할지 묻는다.
 
@@ -26,12 +28,15 @@ savveb는 실제 브라우저로 각 페이지를 열고 스크롤하면서 브�
 링크, `sitemap.xml`, 그리고 주소를 바꾸는 메뉴 버튼을 눌러 보는 방식으로 찾는다
 (React, Next.js 같은 SPA는 일반 링크가 없는 경우가 많다). 그래도 빠지는 페이지가 있으면
 주소를 더 적으면 된다: `savveb save https://사이트/ https://사이트/숨은-페이지`
+광고, 방문자 분석, 추적 스크립트는 받지 않는다. 저장을 느리게 하고 파일만 키우며,
+아카이브에서는 어차피 동작하지 않기 때문이다.
 
 | 옵션 | 기본값 | |
 |---|---|---|
 | `-o 파일` | `<사이트>-<날짜>.wacz` | 저장할 파일 |
 | `--pages N` | 500 | 최대 저장 페이지 수. 더 찾았는데 못 담았으면 알려 준다 |
 | `--depth N` | 20 | 링크를 따라갈 깊이 |
+| `--parallel N` | 4 | 동시에 여는 페이지 수 |
 | `--no-optimize` | 끔 | 큰 이미지를 그대로 둔다 (기본은 300KB 넘는 이미지를 2000px로 줄임) |
 
 ## 재생

@@ -63,7 +63,7 @@ def save(args: argparse.Namespace) -> int:
     try:
         with status:
             result = capture(urls, out, page_limit=args.pages, depth=args.depth,
-                             log=status.log, progress=progress)
+                             parallel=args.parallel, log=status.log, progress=progress)
     except KeyboardInterrupt:
         print(f"\n  {ui.OOPS}  cancelled — nothing was saved.\n", flush=True)
         # Exit now: Playwright's half-closed connection would print noise at shutdown.
@@ -150,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-o", "--output", help="file to write (default: <site>-<date>.wacz)")
     p.add_argument("--pages", type=int, default=500, help="most pages to save (default 500)")
     p.add_argument("--depth", type=int, default=20, help="how many links deep to follow (default 20)")
+    p.add_argument("--parallel", type=int, default=4, help="pages to load at once (default 4)")
     p.add_argument("--no-optimize", action="store_true", help="keep large images as they are")
     p.set_defaults(func=save)
 
