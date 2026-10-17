@@ -1,18 +1,18 @@
-#!/usr/bin/env python3
 """Minimal static server with HTTP Range support (standard library only).
 
 ReplayWeb.page reads only the parts of a WACZ it needs, using Range requests.
 Python's built-in `http.server` has no Range support, so large files fail with
 "lack of range request support". This server answers 206 Partial Content.
 
-Usage: python3 tools/serve.py [PORT] [DIR]
+`savveb play` uses it to serve the player (the web/ files) plus one local
+archive file, which is mapped to /local/<name>.
 """
 
 from __future__ import annotations
 
+import functools
 import http.server
 import os
-import sys
 
 
 class _LimitReader:
@@ -36,6 +36,14 @@ class _LimitReader:
 
 
 class RangeHandler(http.server.SimpleHTTPRequestHandler):
+    local_files: dict[str, str] = {}  # URL path -> file on disk
+
+    def translate_path(self, path):
+        clean = path.split("?", 1)[0].split("#", 1)[0]
+        if clean in self.local_files:
+            return self.local_files[clean]
+        return super().translate_path(path)
+
     def send_head(self):
         path = self.translate_path(self.path)
         if os.path.isdir(path):
@@ -103,13 +111,7 @@ class RangeHandler(http.server.SimpleHTTPRequestHandler):
         pass  # keep the terminal quiet
 
 
-def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8817
-    if len(sys.argv) > 2:
-        os.chdir(sys.argv[2])
-    with http.server.ThreadingHTTPServer(("", port), RangeHandler) as httpd:
-        httpd.serve_forever()
-
-
-if __name__ == "__main__":
-    main()
+def make_server(port: int, web_root: str, local_files: dict[str, str]):
+    handler = type("Handler", (RangeHandler,), {"local_files": local_files})
+    factory = functools.partial(handler, directory=web_root)
+    return http.server.ThreadingHTTPServer(("127.0.0.1", port), factory)

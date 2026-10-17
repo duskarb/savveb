@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "savveb"
+version = "0.1.0"
+description = "Save a website as a WACZ file and replay it anywhere."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+  "playwright>=1.40",
+  "warcio>=1.7",
+  "cdxj-indexer>=1.4",
+  "pillow>=10",
+]
+
+[project.urls]
+Homepage = "https://duskarb.github.io/savveb/"
+Source = "https://github.com/duskarb/savveb"
+
+[project.scripts]
+savveb = "savveb.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["savveb"]
+
+# The website in docs/ is also the local player, so ship it inside the package.
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "savveb/web"

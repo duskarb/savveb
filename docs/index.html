@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>savveb</title>
+  <meta name="description" content="Save a website as a WACZ file and replay it anywhere.">
+  <!-- Loaded up front: the runtime registers its service worker on the window load event. -->
+  <script src="replay/ui.js"></script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #111111;
+      --muted: #666666;
+      --line: #111111;
+      --soft: #dddddd;
+      --mark: #d7dad6;
+      --code: #f3f3f1;
+      --font: Arial, "Helvetica Neue", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111111; --text: #eeeeee; --muted: #999999; --line: #eeeeee; --soft: #333333; --mark: #3a3d39; --code: #1c1c1c; }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    a { color: inherit; }
+
+    .bar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--line);
+      text-transform: uppercase;
+    }
+    .bar a { text-decoration: none; white-space: nowrap; }
+    .bar a:hover { background: var(--mark); }
+    .bar .links { display: flex; gap: 16px; }
+    .bar .now { flex: 1 1 auto; min-width: 0; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar [hidden] { display: none; }
+    #title { font-weight: 700; }
+    #meta { color: var(--muted); margin-left: 8px; text-transform: none; }
+
+    .frame { flex: 1 1 auto; min-height: 0; display: flex; }
+    .frame[hidden], .home[hidden] { display: none; }
+    .frame replay-web-page { flex: 1 1 auto; width: 100%; height: 100%; display: block; }
+
+    .home {
+      width: min(640px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 48px 0 64px;
+      display: grid;
+      gap: 40px;
+      align-content: start;
+    }
+    .home h1 { margin: 0; font-size: 28px; font-weight: 400; line-height: 1.2; }
+    .home h2 { margin: 0; font-size: 14px; font-weight: 400; text-transform: uppercase; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    .home p { margin: 0; color: var(--muted); }
+    .home section { display: grid; gap: 12px; }
+    .home p code { font-family: var(--mono); font-size: 13px; color: var(--text); }
+
+    .drop {
+      display: grid;
+      place-items: center;
+      min-height: 160px;
+      border: 1px dashed var(--line);
+      cursor: pointer;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 16px;
+    }
+    .drop.over, .drop:hover { background: var(--mark); }
+    .drop input { display: none; }
+
+    form { display: grid; grid-template-columns: minmax(0, 1fr) max-content; border: 1px solid var(--line); }
+    form input, form button { font: inherit; color: inherit; background: var(--bg); border: 0; min-height: 40px; padding: 0 10px; min-width: 0; }
+    form button { border-left: 1px solid var(--line); cursor: pointer; text-transform: uppercase; }
+    form button:hover { background: var(--mark); }
+
+    .step { display: grid; gap: 6px; }
+    .step span { color: var(--muted); }
+    .cmd {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      align-items: center;
+      background: var(--code);
+      border: 1px solid var(--soft);
+    }
+    .cmd code { font-family: var(--mono); font-size: 13px; padding: 10px 12px; overflow-x: auto; white-space: nowrap; }
+    .cmd button {
+      font: inherit; font-size: 12px; text-transform: uppercase; color: inherit;
+      background: transparent; border: 0; border-left: 1px solid var(--soft);
+      align-self: stretch; padding: 0 12px; cursor: pointer;
+    }
+    .cmd button:hover { background: var(--mark); }
+
+    .message { margin: auto; padding: 40px 16px; color: var(--muted); max-width: 560px; }
+  </style>
+</head>
+<body>
+  <header class="bar">
+    <a href="./">savveb</a>
+    <div class="now" id="now" hidden><strong id="title"></strong><span id="meta"></span></div>
+    <span class="links">
+      <a id="original" href="#" target="_blank" rel="noopener" hidden>Original</a>
+      <a id="download" href="#" download hidden>Download</a>
+      <a href="https://github.com/duskarb/savveb" id="github">GitHub</a>
+    </span>
+  </header>
+
+  <main class="frame" id="frame">
+    <div class="home" id="home">
+      <h1>Save a website.<br>Replay it anywhere.</h1>
+
+      <section aria-labelledby="replay-heading">
+        <h2 id="replay-heading">Replay</h2>
+        <label class="drop" id="drop">
+          <input id="file" type="file" accept=".wacz,.warc,.gz">
+          <span>Drop a .wacz file here, or click to choose</span>
+        </label>
+        <form id="url-form">
+          <input id="url-input" type="url" placeholder="…or paste the URL of a .wacz file" required>
+          <button type="submit">Open</button>
+        </form>
+        <p>Files open in your browser and are never uploaded. Any WACZ or WARC works, including
+          ones made with other web-archive tools. <a href="?source=demo/example.wacz">Try a demo.</a></p>
+      </section>
+
+      <section aria-labelledby="save-heading">
+        <h2 id="save-heading">Save</h2>
+        <p>Saving runs on your computer, in a real browser, so JavaScript-heavy sites come out right.
+          Needs Python 3.9+ and <a href="https://pipx.pypa.io/">pipx</a>.</p>
+        <div class="step">
+          <span>1. Install once</span>
+          <div class="cmd"><code>pipx install git+https://github.com/duskarb/savveb</code><button type="button">Copy</button></div>
+        </div>
+        <div class="step">
+          <span>2. Save your site — you get one .wacz file</span>
+          <div class="cmd"><code>savveb save https://your-site.example/</code><button type="button">Copy</button></div>
+        </div>
+        <div class="step">
+          <span>3. Drop the file above, or replay it offline</span>
+          <div class="cmd"><code>savveb play your-site.example-2026-01-01.wacz</code><button type="button">Copy</button></div>
+        </div>
+        <p>To link to an archive you've published, add <code>?source=</code> and the .wacz URL to
+          this page's address.</p>
+      </section>
+    </div>
+
+    <!-- The player element must exist before the page finishes loading, or the runtime
+         never initializes. It waits here, hidden, until a source is chosen. -->
+    <div class="frame" id="stage" hidden><replay-web-page id="player" replaybase="replay/"></replay-web-page></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const params = new URLSearchParams(location.search);
+
+    function message(text) {
+      $("frame").innerHTML = "";
+      const box = document.createElement("section");
+      box.className = "message";
+      box.textContent = text;
+      $("frame").appendChild(box);
+    }
+
+    // url = page inside the archive to open. Without it, ReplayWeb.page shows its
+    // own page list and address bar, so every captured page can be browsed.
+    function play({ source, url = "", title = "", meta = "", download = "" }) {
+      document.title = `${title || "Archive"} · savveb`;
+      $("now").hidden = false;
+      $("title").textContent = title || "Archive";
+      $("meta").textContent = meta;
+      $("github").hidden = true;
+      $("original").hidden = !url;
+      if (url) $("original").href = url;
+      $("download").hidden = !download;
+      if (download) $("download").href = download;
+
+      if (!("serviceWorker" in navigator)) {
+        message("Replay needs a service worker: open this page over http(s), not as a local file.");
+        return;
+      }
+      if (!customElements.get("replay-web-page")) {
+        message("The replay runtime (replay/ui.js) is missing.");
+        return;
+      }
+      const player = $("player");
+      if (url) {
+        player.setAttribute("url", url);
+        player.setAttribute("embed", "replayonly");
+      }
+      player.setAttribute("source", source);
+      $("home").hidden = true;
+      $("stage").hidden = false;
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1048576) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+      return `${(bytes / 1048576).toFixed(1)} MB`;
+    }
+
+    function openFile(file) {
+      if (!file) return;
+      // ReplayWeb.page reads blob: URLs directly; the file never leaves this tab.
+      play({ source: URL.createObjectURL(file), title: file.name, meta: formatSize(file.size) });
+    }
+
+    const source = params.get("source");
+    if (source) {
+      const absolute = new URL(source, location.href).href;
+      play({
+        source: absolute,
+        url: params.get("url") || "",
+        title: params.get("title") || decodeURIComponent(new URL(absolute).pathname.split("/").pop()),
+        meta: params.get("meta") || "",
+        download: absolute,
+      });
+    } else {
+      const drop = $("drop");
+      $("file").addEventListener("change", (event) => openFile(event.target.files[0]));
+      drop.addEventListener("dragover", (event) => { event.preventDefault(); drop.classList.add("over"); });
+      drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+      drop.addEventListener("drop", (event) => {
+        event.preventDefault();
+        drop.classList.remove("over");
+        openFile(event.dataTransfer.files[0]);
+      });
+      $("url-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        location.search = new URLSearchParams({ source: $("url-input").value.trim() }).toString();
+      });
+      for (const button of document.querySelectorAll(".cmd button")) {
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(button.previousElementSibling.textContent);
+            button.textContent = "Copied";
+          } catch {
+            button.textContent = "Select it";
+          }
+          setTimeout(() => { button.textContent = "Copy"; }, 1500);
+        });
+      }
+    }
+  </script>
+</body>
+</html>

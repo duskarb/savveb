@@ -1,20 +1,14 @@
-#!/usr/bin/env python3
-"""Capture a website into a WACZ file without Docker.
+"""Capture a website into a WARC with a real browser.
 
-Loads pages in a real Chromium (Playwright), records every response into a WARC,
-then packages it as WACZ with the `wacz` tool. Like Browsertrix, rendering in a
-real browser means JavaScript-heavy sites replay well.
-
-Follows links under the seed URL's path prefix, within depth / page-limit.
+Loads pages in Chromium (Playwright) and records every response. Rendering in a
+real browser means JavaScript-heavy sites replay well. Follows links under the
+start URL's path, within depth / page limit.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
-import subprocess
-import sys
 import tempfile
 from datetime import datetime, timezone
 from io import BytesIO
@@ -23,6 +17,8 @@ from urllib.parse import urldefrag, urlsplit
 
 from warcio.statusandheaders import StatusAndHeaders
 from warcio.warcwriter import WARCWriter
+
+from . import wacz
 
 # Drop headers that break replay. Playwright's body() is already decoded,
 # so the original content-encoding/length no longer apply.
@@ -166,6 +162,7 @@ def _capture_to_warc(seed_url: str, warc_path: Path, page_limit: int, depth: int
                 pending.clear()
 
                 page_title = url
+                print(f"  [{len(visited_pages)}] {url}")
                 try:
                     page.goto(url, wait_until="load", timeout=45000)
                     page.wait_for_timeout(1200)
@@ -224,63 +221,25 @@ def _capture_to_warc(seed_url: str, warc_path: Path, page_limit: int, depth: int
     return written, pages, saved
 
 
-def _wacz_bin() -> str:
-    candidate = Path(sys.executable).parent / "wacz"
-    return str(candidate) if candidate.exists() else "wacz"
+class BrowserMissing(RuntimeError):
+    """Playwright is installed but its Chromium is not."""
 
 
-def capture(seed_url: str, wacz_path: Path, page_limit: int = 30, depth: int = 3,
-            title: str = "", description: str = "") -> Path:
-    """Capture seed_url into a WACZ at wacz_path and return that path."""
-    wacz_path = Path(wacz_path)
-    wacz_path.parent.mkdir(parents=True, exist_ok=True)
-
+def capture(seed_url: str, out_path: Path, page_limit: int = 30, depth: int = 3) -> tuple[int, int, int]:
+    """Capture seed_url into a WACZ at out_path. Returns (pages, resources, bytes saved)."""
+    out_path = Path(out_path)
     with tempfile.TemporaryDirectory() as tmp:
-        warc_path = Path(tmp) / "capture.warc.gz"
-        count, pages, saved = _capture_to_warc(seed_url, warc_path, page_limit, depth)
+        warc_path = Path(tmp) / "data.warc.gz"
+        try:
+            count, pages, saved = _capture_to_warc(seed_url, warc_path, page_limit, depth)
+        except Exception as error:  # noqa: BLE001
+            if "Executable doesn't exist" in str(error):
+                raise BrowserMissing(str(error)) from error
+            raise
         if count == 0:
-            raise RuntimeError(f"no responses were recorded from {seed_url}")
-        saved_note = f", images optimized, {saved / 1024 / 1024:.1f} MB saved" if saved > 0 else ""
-        print(f"    {count} resources, {len(pages)} page(s){saved_note} → packaging WACZ")
-
-        pages_path = Path(tmp) / "pages.jsonl"
-        with pages_path.open("w", encoding="utf-8") as handle:
-            handle.write(json.dumps(
-                {"format": "json-pages-1.0", "id": "pages", "title": "All Pages"}
-            ) + "\n")
-            for entry in pages:
-                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-        argv = [
-            _wacz_bin(), "create", str(warc_path),
-            "-o", str(wacz_path),
-            "--pages", str(pages_path), "--url", seed_url,
-        ]
-        if title:
-            argv += ["--title", title]
-        if description:
-            argv += ["--desc", description]
-        if wacz_path.exists():  # replace the old file on recapture
-            wacz_path.unlink()
-        subprocess.run(argv, check=True, env={**os.environ})
-
-    return wacz_path
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Capture a website into a WACZ file")
-    parser.add_argument("url")
-    parser.add_argument("-o", "--out", required=True)
-    parser.add_argument("--page-limit", type=int, default=30)
-    parser.add_argument("--depth", type=int, default=3)
-    parser.add_argument("--title", default="")
-    parser.add_argument("--description", default="")
-    args = parser.parse_args()
-
-    out = capture(
-        args.url, Path(args.out), args.page_limit, args.depth,
-        args.title, args.description,
-    )
-    print(f"Saved: {out}")
+            raise RuntimeError(f"nothing was recorded from {seed_url}")
+        title = pages[0]["title"] if pages else seed_url
+        partial = out_path.with_name(out_path.name + ".part")
+        wacz.package(warc_path, partial, pages, seed_url, title)
+        partial.replace(out_path)
+    return len(pages), count, saved

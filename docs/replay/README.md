@@ -14,5 +14,5 @@ Source:
 - `https://cdn.jsdelivr.net/npm/replaywebpage@2.4.6/sw.js`
 - `https://cdn.jsdelivr.net/npm/replaywebpage@2.4.6/LICENSE`
 
-The public archive loads these local files instead of a CDN so the viewer stays
+The site and `savveb play` load these local files instead of a CDN so replay stays
 stable even if ReplayWeb.page changes later.
