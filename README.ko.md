@@ -6,13 +6,13 @@
 [duskarb.github.io/savveb](https://duskarb.github.io/savveb/)에서 열거나 `savveb play`로 열면,
 페이지·이미지·폰트·링크까지 원래 사이트 그대로 돌아옵니다.
 
-[데모 보기](https://duskarb.github.io/savveb/?source=demo/yeonamkyu.com.wacz&url=https%3A%2F%2Fwww.yeonamkyu.com%2Fworks&title=yeonamkyu.com) ·
+[데모 보기](https://duskarb.github.io/savveb/?source=demo/yeonamkyu.com-2026-10-18.wacz&url=https%3A%2F%2Fwww.yeonamkyu.com%2Fworks&title=yeonamkyu.com) ·
 [English](README.md)
 
 ```
 $ savveb save https://www.yeonamkyu.com/
 
-  ʕ•ᴥ•ʔ  savveb 0.3.1
+  ʕ•ᴥ•ʔ  savveb 0.3.2
   saving https://www.yeonamkyu.com/
 
       1  https://www.yeonamkyu.com/
@@ -118,6 +118,8 @@ python3 -m savveb save https://example.com/
 
 ## 변경 기록
 
+- **0.3.2** — Next.js 페이지 데이터처럼 charset이 없는 텍스트 응답의 한글이 깨지던 문제 수정.
+  이전에 만든 아카이브는 다시 저장해야 합니다.
 - **0.3.1** — 웹사이트 한국어/영어 지원, yeonamkyu.com 데모, 문서 정리.
 - **0.3.0** — Adobe Fonts(Typekit) 등 바이너리로 불러오는 폰트도 재생(재생기 수정, 이미 저장한
   아카이브에도 적용). 화면 크기별 이미지가 깨지지 않음.

@@ -6,13 +6,13 @@ One command saves a whole website into a single `.wacz` file. Open that file on
 [duskarb.github.io/savveb](https://duskarb.github.io/savveb/) or with `savveb play`,
 and the site comes back as it was — pages, images, fonts, working links.
 
-[Try a demo](https://duskarb.github.io/savveb/?source=demo/yeonamkyu.com.wacz&url=https%3A%2F%2Fwww.yeonamkyu.com%2Fworks&title=yeonamkyu.com) ·
+[Try a demo](https://duskarb.github.io/savveb/?source=demo/yeonamkyu.com-2026-10-18.wacz&url=https%3A%2F%2Fwww.yeonamkyu.com%2Fworks&title=yeonamkyu.com) ·
 [한국어](README.ko.md)
 
 ```
 $ savveb save https://www.yeonamkyu.com/
 
-  ʕ•ᴥ•ʔ  savveb 0.3.1
+  ʕ•ᴥ•ʔ  savveb 0.3.2
   saving https://www.yeonamkyu.com/
 
       1  https://www.yeonamkyu.com/
@@ -118,6 +118,8 @@ bundled into the package for `savveb play`.
 
 ## Changes
 
+- **0.3.2** — Korean and other UTF-8 text in Next.js page data (and any text response
+  without a charset) is no longer garbled. Re-save archives made before.
 - **0.3.1** — Website in Korean and English, yeonamkyu.com demo; clearer docs.
 - **0.3.0** — Fonts from Adobe Fonts (Typekit) and other byte-loaded fonts replay
   (player fix, also for archives saved earlier). Responsive images no longer break.

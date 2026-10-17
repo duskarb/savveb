@@ -37,6 +37,29 @@ _OPT_QUALITY = int(os.environ.get("ARCHIVE_IMG_QUALITY", "82"))     # JPEG quali
 _OPT_MIN_BYTES = int(os.environ.get("ARCHIVE_IMG_MIN_BYTES", "300000"))  # smaller files are left alone
 
 
+# Chromium hands over text bodies whose Content-Type has no charset (e.g. Next.js
+# "text/x-component") decoded as windows-1252 and re-encoded as UTF-8, so UTF-8 text
+# such as Korean arrives double-encoded ("í‚¤ë³´ë“œ" instead of "키보드").
+_TEXT_TYPES = ("text/", "json", "javascript", "x-component", "xml")
+_CP1252_BYTE = {bytes([b]).decode("cp1252"): b for b in range(0x80, 0xA0) if b not in (0x81, 0x8D, 0x8F, 0x90, 0x9D)}
+
+
+def _repair_text(content_type: str, body: bytes) -> bytes:
+    """Undo that double encoding. Text that was really UTF-8 fails the round trip
+    (it has characters outside windows-1252, or the bytes are not valid UTF-8), so it
+    is left alone."""
+    ct = (content_type or "").lower()
+    if "charset" in ct or not any(t in ct for t in _TEXT_TYPES) or body.isascii():
+        return body
+    try:
+        text = body.decode("utf-8")
+        raw = bytes(_CP1252_BYTE.get(ch, ord(ch)) if ord(ch) < 0x100 or ch in _CP1252_BYTE else 0x100
+                    for ch in text)
+        return raw.decode("utf-8").encode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return body
+
+
 def _optimize_image(content_type: str, body: bytes) -> tuple[bytes, str]:
     """Downscale and recompress a large image; keep it only if smaller.
     Returns (body, content_type). Without Pillow, or on failure, returns the original."""
@@ -336,6 +359,7 @@ async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: in
                         refetch.add(res_url)
                         continue
                     content_type = headers.get("content-type", "")
+                    body = _repair_text(content_type, body)
                     original_len = len(body)
                     if _OPTIMIZE and original_len >= _OPT_MIN_BYTES:
                         body, content_type = await asyncio.to_thread(_optimize_image, content_type, body)
