@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manifest Editor</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #111111;
+      --muted: #666666;
+      --line: #111111;
+      --soft: #dddddd;
+      --warn: #fff3c4;
+      --bad: #ffe0dc;
+      --mark: #f4e850;
+      --font: Arial, "Helvetica Neue", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .shell {
+      width: min(1280px, calc(100vw - 28px));
+      margin: 0 auto;
+      padding: 14px 0 56px;
+    }
+
+    header,
+    .toolbar,
+    .filters,
+    .row {
+      border-bottom: 1px solid var(--line);
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) max-content;
+      gap: 20px;
+      padding: 0 0 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 400;
+      text-transform: uppercase;
+    }
+
+    .help,
+    .summary,
+    .hint {
+      color: var(--muted);
+    }
+
+    .help {
+      max-width: 760px;
+      margin: 8px 0 0;
+    }
+
+    .toolbar,
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      align-items: center;
+    }
+
+    .toolbar {
+      border-top: 1px solid var(--line);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button,
+    .file-label {
+      min-height: 42px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 0 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      text-transform: uppercase;
+    }
+
+    button:hover,
+    .file-label:hover,
+    .row:hover {
+      background: var(--mark);
+    }
+
+    .file-label input {
+      display: none;
+    }
+
+    .filters {
+      padding: 10px 0;
+      gap: 10px;
+      border-color: var(--soft);
+    }
+
+    .filters label {
+      display: grid;
+      grid-template-columns: max-content minmax(120px, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .filters input,
+    .filters select {
+      min-height: 32px;
+      border: 1px solid var(--line);
+      padding: 4px 8px;
+      background: #fff;
+    }
+
+    .summary {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--soft);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 48px minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(240px, 2fr) 150px minmax(220px, 1.4fr);
+      gap: 10px;
+      padding: 10px 0;
+      border-color: var(--soft);
+      align-items: start;
+    }
+
+    .row.has-error {
+      background: var(--bad);
+    }
+
+    .row.has-warning {
+      background: var(--warn);
+    }
+
+    .cell {
+      display: grid;
+      gap: 4px;
+    }
+
+    .cell span {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .cell input,
+    .cell select,
+    .cell textarea {
+      width: 100%;
+      min-height: 32px;
+      border: 1px solid var(--soft);
+      background: #fff;
+      padding: 5px 7px;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    .messages {
+      grid-column: 2 / -1;
+      color: #8a1f11;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .links a {
+      border: 1px solid var(--line);
+      padding: 4px 7px;
+      color: inherit;
+      text-decoration: none;
+      text-transform: uppercase;
+    }
+
+    .links a:hover {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    @media (max-width: 900px) {
+      header,
+      .row {
+        grid-template-columns: 1fr;
+      }
+
+      .messages {
+        grid-column: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Manifest Editor</h1>
+        <p class="help">Local editor for manifest.csv. Load the file, edit rows (status is a fixed list), then download the new manifest.csv and put it back in the archive folder.</p>
+      </div>
+      <div class="hint">Works from file://</div>
+    </header>
+
+    <section class="toolbar" aria-label="File controls">
+      <label class="file-label">
+        Load CSV
+        <input id="file" type="file" accept=".csv,text/csv">
+      </label>
+      <button id="add-row" type="button">Add Row</button>
+      <button id="download" type="button">Download CSV</button>
+    </section>
+
+    <section class="filters" aria-label="Filters">
+      <label>
+        <span>Search</span>
+        <input id="search" type="search" autocomplete="off">
+      </label>
+      <label>
+        <span>Status</span>
+        <select id="status-filter">
+          <option value="">All</option>
+        </select>
+      </label>
+    </section>
+
+    <p id="summary" class="summary">Load manifest.csv to start.</p>
+    <section id="rows" aria-label="Manifest rows"></section>
+  </main>
+
+  <script>
+    const REQUIRED_FIELDS = [
+      "title",
+      "creator",
+      "collection",
+      "original_url",
+      "status",
+      "notes",
+      "link",
+      "wacz_file",
+      "archived_date",
+      "sha256",
+    ];
+
+    const STATUSES = [
+      "",
+      "pending",
+      "ready-to-capture",
+      "review-needed",
+      "ok",
+      "partial",
+      "recapture-needed",
+      "private",
+      "hidden",
+    ];
+
+    const RENAMES = { student_name: "creator", semester: "collection", drive_link: "link", url: "original_url" };
+
+    const state = {
+      fields: [...REQUIRED_FIELDS],
+      rows: [],
+      query: "",
+      status: "",
+      fileName: "manifest.csv",
+    };
+
+    const rowsEl = document.getElementById("rows");
+    const summaryEl = document.getElementById("summary");
+    const searchEl = document.getElementById("search");
+    const statusFilterEl = document.getElementById("status-filter");
+
+    for (const value of STATUSES) {
+      const option = document.createElement("option");
+      option.value = value || "(blank)";
+      option.textContent = value || "(blank)";
+      statusFilterEl.appendChild(option);
+    }
+    statusFilterEl.value = "";
+
+    function clean(value) {
+      return String(value || "").trim();
+    }
+
+    function parseCsv(text) {
+      const parsed = [];
+      let row = [];
+      let cell = "";
+      let quoted = false;
+
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (quoted) {
+          if (char === '"' && next === '"') {
+            cell += '"';
+            i += 1;
+          } else if (char === '"') {
+            quoted = false;
+          } else {
+            cell += char;
+          }
+        } else if (char === '"') {
+          quoted = true;
+        } else if (char === ",") {
+          row.push(cell);
+          cell = "";
+        } else if (char === "\n") {
+          row.push(cell);
+          parsed.push(row);
+          row = [];
+          cell = "";
+        } else if (char !== "\r") {
+          cell += char;
+        }
+      }
+
+      if (cell || row.length) {
+        row.push(cell);
+        parsed.push(row);
+      }
+
+      // Older manifests use other header names; rename them to the canonical ones.
+      const fields = (parsed.shift() || [])
+        .map((field) => clean(field).replace(/^\ufeff/, ""))
+        .filter(Boolean)
+        .map((field) => RENAMES[field] || field);
+      const rows = parsed
+        .filter((values) => values.some(clean))
+        .map((values) => {
+          const item = {};
+          fields.forEach((field, index) => {
+            if (!clean(item[field])) item[field] = clean(values[index]);
+          });
+          return item;
+        });
+
+      return { fields, rows };
+    }
+
+    function csvEscape(value) {
+      const text = String(value || "");
+      if (/[",\n\r]/.test(text)) return `"${text.replaceAll('"', '""')}"`;
+      return text;
+    }
+
+    function toCsv() {
+      const lines = [state.fields.map(csvEscape).join(",")];
+      for (const row of state.rows) {
+        lines.push(state.fields.map((field) => csvEscape(row[field])).join(","));
+      }
+      return `${lines.join("\n")}\n`;
+    }
+
+    function ensureFields(fields) {
+      const next = [...fields];
+      for (const field of REQUIRED_FIELDS) {
+        if (!next.includes(field)) next.push(field);
+      }
+      return next;
+    }
+
+    function blankRow() {
+      return Object.fromEntries(state.fields.map((field) => [field, ""]));
+    }
+
+    function rowStatus(row) {
+      return clean(row.status).toLowerCase();
+    }
+
+    function validate(row) {
+      const errors = [];
+      const warnings = [];
+      const status = rowStatus(row);
+      const url = clean(row.original_url);
+      const hasWacz = clean(row.wacz_file);
+
+      if (!clean(row.title) && !clean(row.creator) && !url) errors.push("needs a title, creator or original_url");
+      if (status && !STATUSES.includes(status)) errors.push(`unknown status: ${status}`);
+      if (url && !/^https?:\/\//i.test(url)) errors.push("original_url must start with http:// or https://");
+      if (["ready-to-capture", "review-needed", "ok", "partial", "recapture-needed"].includes(status) && !url) {
+        errors.push("this status needs an original_url");
+      }
+      if (["ok", "partial", "review-needed"].includes(status) && !hasWacz) {
+        warnings.push("replayable status but wacz_file is empty");
+      }
+      if (!status) warnings.push("blank status is treated as pending");
+
+      return { errors, warnings };
+    }
+
+    function matches(row) {
+      const q = state.query.toLowerCase();
+      const status = rowStatus(row) || "(blank)";
+      const haystack = [
+        row.title,
+        row.creator,
+        row.original_url,
+        row.collection,
+        row.status,
+        row.notes,
+      ].map(clean).join(" ").toLowerCase();
+
+      return (!state.status || status === state.status) && (!q || haystack.includes(q));
+    }
+
+    function makeInput(row, field, multiline = false) {
+      const label = document.createElement("label");
+      label.className = "cell";
+      const caption = document.createElement("span");
+      caption.textContent = field;
+
+      let input;
+      if (field === "status") {
+        input = document.createElement("select");
+        for (const value of STATUSES) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value || "(blank)";
+          input.appendChild(option);
+        }
+        input.value = row[field] || "";
+      } else if (multiline) {
+        input = document.createElement("textarea");
+        input.rows = 2;
+        input.value = row[field] || "";
+      } else {
+        input = document.createElement("input");
+        input.value = row[field] || "";
+      }
+
+      input.addEventListener("input", () => {
+        row[field] = input.value;
+      });
+      input.addEventListener("change", () => {
+        row[field] = input.value;
+        render();
+      });
+
+      label.append(caption, input);
+      return label;
+    }
+
+    function renderLinks(row) {
+      const wrap = document.createElement("div");
+      wrap.className = "links";
+
+      const links = [
+        ["Original", row.original_url],
+        ["Link", row.link],
+      ];
+
+      for (const [label, href] of links) {
+        if (!clean(href)) continue;
+        const link = document.createElement("a");
+        link.href = href;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = label;
+        wrap.appendChild(link);
+      }
+
+      return wrap;
+    }
+
+    function render() {
+      rowsEl.innerHTML = "";
+      const visible = state.rows.filter(matches);
+      let errorCount = 0;
+      let warningCount = 0;
+
+      state.rows.forEach((row) => {
+        const result = validate(row);
+        if (result.errors.length) errorCount += 1;
+        if (result.warnings.length) warningCount += 1;
+      });
+
+      summaryEl.textContent = `${visible.length}/${state.rows.length} rows shown. Errors ${errorCount}, warnings ${warningCount}.`;
+
+      visible.forEach((row) => {
+        const index = state.rows.indexOf(row);
+        const result = validate(row);
+        const item = document.createElement("article");
+        item.className = "row";
+        if (result.errors.length) item.classList.add("has-error");
+        else if (result.warnings.length) item.classList.add("has-warning");
+
+        const number = document.createElement("div");
+        number.textContent = String(index + 1).padStart(2, "0");
+
+        item.append(
+          number,
+          makeInput(row, "title"),
+          makeInput(row, "creator"),
+          makeInput(row, "collection"),
+          makeInput(row, "original_url"),
+          makeInput(row, "status"),
+          makeInput(row, "notes", true),
+        );
+
+        const messages = document.createElement("div");
+        messages.className = "messages";
+        messages.textContent = [...result.errors, ...result.warnings].join(" / ");
+        if (!messages.textContent) messages.appendChild(renderLinks(row));
+        item.appendChild(messages);
+        rowsEl.appendChild(item);
+      });
+    }
+
+    function loadText(text, fileName = "manifest.csv") {
+      const parsed = parseCsv(text);
+      state.fields = ensureFields(parsed.fields);
+      state.rows = parsed.rows.map((row) => ({ ...blankRow(), ...row }));
+      state.fileName = fileName;
+      render();
+    }
+
+    document.getElementById("file").addEventListener("change", (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => loadText(String(reader.result || ""), file.name);
+      reader.readAsText(file);
+    });
+
+    document.getElementById("add-row").addEventListener("click", () => {
+      state.rows.push(blankRow());
+      render();
+    });
+
+    document.getElementById("download").addEventListener("click", () => {
+      const blob = new Blob([toCsv()], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = state.fileName || "manifest.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
+    searchEl.addEventListener("input", (event) => {
+      state.query = event.target.value;
+      render();
+    });
+
+    statusFilterEl.addEventListener("change", (event) => {
+      state.status = event.target.value;
+      render();
+    });
+  </script>
+</body>
+</html>

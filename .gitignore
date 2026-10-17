@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+.claude/
+
+# wacz/ is committed on purpose: GitHub Pages serves it for replay.
+# Every recapture adds the new file to git history, so .git grows over time.
