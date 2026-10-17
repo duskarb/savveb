@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shlex
 import socket
@@ -38,21 +39,26 @@ def default_name(url: str) -> str:
 
 
 def save(args: argparse.Namespace) -> int:
-    url = args.url if re.match(r"https?://", args.url) else f"https://{args.url}"
+    urls = [u if re.match(r"https?://", u) else f"https://{u}" for u in args.urls]
+    url = urls[0]
     out = Path(args.output or default_name(url))
     if out.suffix != ".wacz":
         out = out.with_suffix(".wacz")
     if args.no_optimize:
-        import os
-
         os.environ["ARCHIVE_OPTIMIZE"] = "0"
 
     from .capture import BrowserMissing, capture
 
-    print(f"Saving {url}  (up to {args.pages} pages, {args.depth} links deep)")
+    print(f"Saving {url}")
+    for extra in urls[1:]:
+        print(f"  also starting from {extra}")
     started = time.monotonic()
     try:
-        pages, resources, saved = capture(url, out, page_limit=args.pages, depth=args.depth)
+        result = capture(urls, out, page_limit=args.pages, depth=args.depth)
+    except KeyboardInterrupt:
+        print("\nCancelled. Nothing was saved.", flush=True)
+        # Exit now: Playwright's half-closed connection would print noise at shutdown.
+        os._exit(130)
     except BrowserMissing:
         print("\nChromium for Playwright is not installed. It is needed once (~100 MB):")
         print("  " + " ".join(INSTALL_BROWSER))
@@ -64,10 +70,14 @@ def save(args: argparse.Namespace) -> int:
         print(f"Could not save {url}: {error}")
         return 1
 
+    pages, saved = result["pages"], result["saved"]
     size = out.stat().st_size / 1048576
     note = f", {saved / 1048576:.1f} MB smaller after image optimization" if saved > 0 else ""
-    print(f"\nSaved {out}  ({pages} page{'s' * (pages != 1)}, {resources} files, {size:.1f} MB{note}, "
+    print(f"\nSaved {out}  ({pages} page{'s' * (pages != 1)}, {result['resources']} files, {size:.1f} MB{note}, "
           f"{time.monotonic() - started:.0f}s)")
+    if result["left"]:
+        print(f"{result['left']} more page(s) were found but not saved (limit --pages {args.pages}). "
+              f"Run again with a higher --pages to get them.")
     print(f"Replay it:  savveb play {shlex.quote(str(out))}")
     print("or drop the file on https://duskarb.github.io/savveb/")
     return 0
@@ -119,10 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("save", help="capture a website into a .wacz file")
-    p.add_argument("url")
+    p.add_argument("urls", nargs="+", metavar="URL",
+                   help="site to save; give more URLs of the same site for pages nothing links to")
     p.add_argument("-o", "--output", help="file to write (default: <site>-<date>.wacz)")
-    p.add_argument("--pages", type=int, default=30, help="most pages to visit (default 30)")
-    p.add_argument("--depth", type=int, default=3, help="how many links deep to follow (default 3)")
+    p.add_argument("--pages", type=int, default=500, help="most pages to save (default 500)")
+    p.add_argument("--depth", type=int, default=20, help="how many links deep to follow (default 20)")
     p.add_argument("--no-optimize", action="store_true", help="keep large images as they are")
     p.set_defaults(func=save)
 

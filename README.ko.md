@@ -19,13 +19,16 @@ savveb save https://내-사이트.example/
 Chromium(약 100MB)을 한 번 설치할지 묻는다.
 
 savveb는 실제 브라우저로 각 페이지를 열고 스크롤하면서 브라우저가 받은 것을 모두
-기록한다. 그래서 JavaScript로 만든 사이트도 잘 담긴다. 시작 URL 경로 아래의 링크를 따라간다.
+기록한다. 그래서 JavaScript로 만든 사이트도 잘 담긴다. 시작 URL 경로 아래의 페이지를
+링크, `sitemap.xml`, 그리고 주소를 바꾸는 메뉴 버튼을 눌러 보는 방식으로 찾는다
+(React, Next.js 같은 SPA는 일반 링크가 없는 경우가 많다). 그래도 빠지는 페이지가 있으면
+주소를 더 적으면 된다: `savveb save https://사이트/ https://사이트/숨은-페이지`
 
 | 옵션 | 기본값 | |
 |---|---|---|
 | `-o 파일` | `<사이트>-<날짜>.wacz` | 저장할 파일 |
-| `--pages N` | 30 | 최대 방문 페이지 수 |
-| `--depth N` | 3 | 링크를 따라갈 깊이 |
+| `--pages N` | 500 | 최대 저장 페이지 수. 더 찾았는데 못 담았으면 알려 준다 |
+| `--depth N` | 20 | 링크를 따라갈 깊이 |
 | `--no-optimize` | 끔 | 큰 이미지를 그대로 둔다 (기본은 300KB 넘는 이미지를 2000px로 줄임) |
 
 ## 재생
@@ -37,8 +40,9 @@ savveb는 실제 브라우저로 각 페이지를 열고 스크롤하면서 브�
   `https://duskarb.github.io/savveb/?source=<wacz 주소>`를 공유한다.
   `&url=<페이지>`를 붙이면 페이지 목록 대신 그 페이지가 바로 열린다.
 
-다른 도구로 만든 WACZ/WARC도 재생된다. 클릭해야 내용이 나오는 사이트는
-[ArchiveWeb.page](https://webrecorder.net/archivewebpage)로 직접 둘러보며 저장하면 좋다.
+다른 도구로 만든 WACZ/WARC도 재생된다. [ArchiveWeb.page](https://webrecorder.net/archivewebpage)는
+사람이 직접 둘러보며 녹화하는 브라우저 확장이고, savveb는 반대로 URL만 주면 사이트 전체를
+알아서 돌아다니며 담는다. 명령 한 줄이나 스크립트로 돌릴 수 있다.
 
 ## 보관 파일 관리
 

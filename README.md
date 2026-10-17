@@ -21,14 +21,17 @@ You get `your-site.example-<date>.wacz` in the current folder. The first run ask
 to install Playwright's Chromium (~100 MB) once.
 
 savveb opens each page in a real browser, scrolls it, and records everything the
-browser loads, so sites built with JavaScript come out right. It follows links
-under the starting URL's path.
+browser loads, so sites built with JavaScript come out right. It finds the site's
+pages under the starting URL's path by following links, reading `sitemap.xml`, and
+clicking menu buttons that change the address (single-page apps built with React,
+Next.js and similar often have no ordinary links). If a page still gets missed, add
+its address: `savveb save https://site.example/ https://site.example/hidden-page`.
 
 | Option | Default | |
 |---|---|---|
 | `-o FILE` | `<site>-<date>.wacz` | where to write |
-| `--pages N` | 30 | most pages to visit |
-| `--depth N` | 3 | how many links deep to follow |
+| `--pages N` | 500 | most pages to save; savveb tells you if it found more |
+| `--depth N` | 20 | how many links deep to follow |
 | `--no-optimize` | off | keep large images as they are (by default images over 300 KB are downscaled to 2000 px) |
 
 ## Replay
@@ -42,8 +45,9 @@ under the starting URL's path.
   Add `&url=<page>` to open a specific page instead of the page list.
 
 Any WACZ or WARC plays, including files made with other tools such as
-[ArchiveWeb.page](https://webrecorder.net/archivewebpage) (handy for sites that only
-load content when you click around).
+[ArchiveWeb.page](https://webrecorder.net/archivewebpage), a browser extension that
+records as you browse by hand. savveb is for the opposite: give it a URL and it
+visits the whole site on its own, from one command or a script.
 
 ## Keeping archives
 
