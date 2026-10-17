@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>archivve player</title>
+  <title>savveb player</title>
   <!-- Loaded up front: the runtime registers its service worker on the window load event. -->
   <script src="replay/ui.js"></script>
   <style>
@@ -131,7 +131,7 @@
         message("This browser cannot replay archives here: open this page over http(s), not file://.");
         return;
       }
-      document.title = title || "archivve player";
+      document.title = title || "savveb player";
       $("title").textContent = title || "Archive";
       $("meta").textContent = meta;
       $("original").hidden = !url;

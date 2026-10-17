@@ -151,7 +151,7 @@ def _capture_to_warc(seed_url: str, warc_path: Path, page_limit: int, depth: int
                 user_agent=(
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/149.0.0.0 Safari/537.36 archivve-playwright"
+                    "Chrome/149.0.0.0 Safari/537.36 savveb-playwright"
                 )
             )
             page = context.new_page()

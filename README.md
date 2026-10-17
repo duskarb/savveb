@@ -1,4 +1,4 @@
-# archivve
+# savveb
 
 A tiny, low-dependency tool for **archiving websites and replaying them later**.
 
@@ -15,7 +15,7 @@ ISO 28500), so they stay readable by other web-archive tools long after this one
 ## Start your own archive
 
 1. Click **Use this template** on GitHub (or download this folder).
-2. Edit `archivve.json` — the title and description of your archive.
+2. Edit `savveb.json` — the title and description of your archive.
 3. Delete the demo row in `manifest.csv` and `wacz/demo/`.
 
 ```bash
@@ -60,7 +60,7 @@ Optional parameters: `url` (page to open inside the archive), `title`, `meta`.
 | `check [--quick]` | Validate `manifest.csv`; verify every WACZ against its sha256 |
 | `doctor` | Show what's installed |
 
-Capture options live in `archivve.json` (`capture.page_limit`, `capture.depth`):
+Capture options live in `savveb.json` (`capture.page_limit`, `capture.depth`):
 the crawler follows links under the starting URL's path, up to that many pages and
 clicks deep. Large images are downscaled while capturing; set `ARCHIVE_OPTIMIZE=0`
 to keep originals.
@@ -85,14 +85,14 @@ to keep originals.
 | `recapture-needed` | Capture again on the next run | no |
 | `private`, `hidden` | Never shown or captured | no |
 
-Column labels in the list can be renamed in `archivve.json` → `labels`
+Column labels in the list can be renamed in `savveb.json` → `labels`
 (e.g. `"creator": "Student"`, `"collection": "Semester"`). Older manifests with
 `student_name` / `semester` / `drive_link` columns are read as-is.
 
 ## Optional: an intake sheet
 
 If other people submit sites, put a Google Sheet (or any CSV URL) in
-`archivve.json` → `intake_sheet`. The sheet needs columns for the URL
+`savveb.json` → `intake_sheet`. The sheet needs columns for the URL
 (`url`/`link`/`original_url`) and optionally `title`, `creator`, `collection`.
 Share it as "anyone with the link can view". Each `capture` adds rows that are new
 to `manifest.csv` and never overwrites what's already there.

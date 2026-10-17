@@ -157,7 +157,7 @@
   <body>
     <main class="shell">
       <nav class="topbar" aria-label="Archive">
-        <span>archivve</span>
+        <span>savveb</span>
         <span>
           <a href="play.html">Open a WACZ</a>
           <a id="sheet-link" href="#" target="_blank" rel="noopener" hidden> · Intake sheet</a>
@@ -208,7 +208,7 @@
     </main>
 
     <script>
-      // This page reads only manifest.csv and archivve.json from its own folder.
+      // This page reads only manifest.csv and savveb.json from its own folder.
       // Replay uses a service worker, so serve the folder (`python3 archive.py view`
       // or GitHub Pages) instead of opening this file directly.
       const PUBLIC = ["ok", "partial"];
@@ -391,7 +391,7 @@
       async function load() {
         $("status").textContent = "Reading manifest.csv…";
         try {
-          const config = await fetch("archivve.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {}));
+          const config = await fetch("savveb.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : {}));
           applyConfig(config);
         } catch {
           applyConfig({});

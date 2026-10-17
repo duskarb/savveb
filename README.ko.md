@@ -1,4 +1,4 @@
-# archivve
+# savveb
 
 웹사이트를 **보존(캡처)하고 나중에 그대로 재생**하는 아주 단순한 도구.
 
@@ -12,7 +12,7 @@ GitHub Pages에 올리든 그대로 동작한다. 데이터베이스·서버·�
 ## 내 아카이브 시작하기
 
 1. GitHub에서 **Use this template**을 누른다 (또는 이 폴더를 내려받는다).
-2. `archivve.json`에서 아카이브 제목·설명을 바꾼다.
+2. `savveb.json`에서 아카이브 제목·설명을 바꾼다.
 3. `manifest.csv`의 데모 행과 `wacz/demo/`를 지운다.
 
 ```bash
@@ -56,7 +56,7 @@ https://<계정>.github.io/<저장소>/play.html?source=<wacz 주소>
 | `check [--quick]` | `manifest.csv` 검사 + 모든 WACZ를 sha256으로 무결성 확인 |
 | `doctor` | 설치 상태 확인 |
 
-캡처 범위는 `archivve.json`의 `capture.page_limit`, `capture.depth`로 정한다. 시작 URL의
+캡처 범위는 `savveb.json`의 `capture.page_limit`, `capture.depth`로 정한다. 시작 URL의
 경로 아래 링크를 그 페이지 수·깊이만큼 따라간다. 큰 이미지는 캡처하면서 줄이며,
 원본을 유지하려면 `ARCHIVE_OPTIMIZE=0`.
 
@@ -80,13 +80,13 @@ https://<계정>.github.io/<저장소>/play.html?source=<wacz 주소>
 | `recapture-needed` | 다음 실행 때 다시 캡처 | 아니오 |
 | `private`, `hidden` | 공개도 캡처도 안 함 | 아니오 |
 
-목록의 칸 이름은 `archivve.json` → `labels`에서 바꿀 수 있다
+목록의 칸 이름은 `savveb.json` → `labels`에서 바꿀 수 있다
 (예: `"creator": "학생"`, `"collection": "학기"`). 예전 형식(`student_name` /
 `semester` / `drive_link` 칸)의 manifest도 그대로 읽는다.
 
 ## 선택: 접수용 시트
 
-여러 사람이 사이트를 제출한다면 구글 시트(또는 아무 CSV 주소)를 `archivve.json` →
+여러 사람이 사이트를 제출한다면 구글 시트(또는 아무 CSV 주소)를 `savveb.json` →
 `intake_sheet`에 넣는다. 시트에는 주소 칸(`url`/`link`/`original_url`/`링크`)과 선택적으로
 `title`, `creator`, `collection` 칸이 있으면 된다. "링크가 있는 모든 사용자 보기"로 공유한다.
 `capture`할 때마다 새 행만 `manifest.csv`에 추가하고, 이미 있는 내용은 절대 덮어쓰지 않는다.

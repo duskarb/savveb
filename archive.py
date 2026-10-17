@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""archivve — capture websites into WACZ files and replay them from this folder.
+"""savveb — capture websites into WACZ files and replay them from this folder.
 
     python3 archive.py add https://example.com --title "Example"
     python3 archive.py capture

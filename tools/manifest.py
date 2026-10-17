@@ -1,4 +1,4 @@
-"""Shared manifest.csv and archivve.json helpers (standard library only)."""
+"""Shared manifest.csv and savveb.json helpers (standard library only)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifest.csv"
-CONFIG = ROOT / "archivve.json"
+CONFIG = ROOT / "savveb.json"
 
 # Editable columns on the left, machine-filled columns on the right.
 FIELDS = [
