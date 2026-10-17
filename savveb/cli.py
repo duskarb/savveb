@@ -16,7 +16,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit
 
-from . import __version__
+from . import __version__, ui
 
 INSTALL_BROWSER = [sys.executable, "-m", "playwright", "install", "chromium"]
 
@@ -49,37 +49,52 @@ def save(args: argparse.Namespace) -> int:
 
     from .capture import BrowserMissing, capture
 
-    print(f"Saving {url}")
+    print(f"\n  {ui.BEAR}  savveb {__version__}")
+    print(f"  saving {url}")
     for extra in urls[1:]:
-        print(f"  also starting from {extra}")
-    started = time.monotonic()
+        print(f"     and {extra}")
+    print()
+
+    status = ui.Status()
+
+    def progress(pages: int, files: int, size: int, current: str) -> None:
+        status.update(f"{pages} page{'s' * (pages != 1)} · {files} files · {size / 1048576:.1f} MB")
+
     try:
-        result = capture(urls, out, page_limit=args.pages, depth=args.depth)
+        with status:
+            result = capture(urls, out, page_limit=args.pages, depth=args.depth,
+                             log=status.log, progress=progress)
     except KeyboardInterrupt:
-        print("\nCancelled. Nothing was saved.", flush=True)
+        print(f"\n  {ui.OOPS}  cancelled — nothing was saved.\n", flush=True)
         # Exit now: Playwright's half-closed connection would print noise at shutdown.
         os._exit(130)
     except BrowserMissing:
-        print("\nChromium for Playwright is not installed. It is needed once (~100 MB):")
-        print("  " + " ".join(INSTALL_BROWSER))
-        if sys.stdin.isatty() and input("Install it now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
+        print(f"  {ui.ASK}  savveb needs its own browser first (Chromium, ~100 MB, just once).")
+        print(f"         {' '.join(INSTALL_BROWSER)}")
+        if sys.stdin.isatty() and input("         install it now? [Y/n] ").strip().lower() in {"", "y", "yes"}:
             subprocess.run(INSTALL_BROWSER, check=True)
+            print(f"\n  {ui.HAPPY}  browser ready. back to saving!")
             return save(args)
         return 1
     except Exception as error:  # noqa: BLE001
-        print(f"Could not save {url}: {error}")
+        print(f"\n  {ui.SAD}  could not save {url}")
+        print(f"         {error}\n")
         return 1
 
     pages, saved = result["pages"], result["saved"]
     size = out.stat().st_size / 1048576
-    note = f", {saved / 1048576:.1f} MB smaller after image optimization" if saved > 0 else ""
-    print(f"\nSaved {out}  ({pages} page{'s' * (pages != 1)}, {result['resources']} files, {size:.1f} MB{note}, "
-          f"{time.monotonic() - started:.0f}s)")
+    took = ui.elapsed(time.monotonic() - status.started)
+    print(f"\n  {ui.HAPPY}  saved {pages} page{'s' * (pages != 1)} · {result['resources']} files · "
+          f"{size:.1f} MB · {took}")
+    print(f"         → {out}")
+    if saved > 0:
+        print(f"         (images made {saved / 1048576:.1f} MB smaller)")
     if result["left"]:
-        print(f"{result['left']} more page(s) were found but not saved (limit --pages {args.pages}). "
-              f"Run again with a higher --pages to get them.")
-    print(f"Replay it:  savveb play {shlex.quote(str(out))}")
-    print("or drop the file on https://duskarb.github.io/savveb/")
+        print(f"\n  {ui.ASK}  found {result['left']} more page(s) past the limit of {args.pages}.")
+        print(f"         to get them too: --pages {args.pages + result['left']}")
+    print("\n  replay it:")
+    print(f"    savveb play {shlex.quote(str(out))}")
+    print("    or drop it on https://duskarb.github.io/savveb/\n")
     return 0
 
 
@@ -102,7 +117,7 @@ def play(args: argparse.Namespace) -> int:
     else:
         path = Path(args.archive).expanduser().resolve()
         if not path.is_file():
-            print(f"No such file: {path}")
+            print(f"  {ui.SAD}  no such file: {path}")
             return 1
         source = f"/local/{quote(path.name)}"
         local_files[source] = str(path)
@@ -111,13 +126,14 @@ def play(args: argparse.Namespace) -> int:
     port = free_port(args.port)
     server = make_server(port, str(web_root()), local_files)
     url = f"http://localhost:{port}/?{urlencode({'source': source, 'title': title})}"
-    print(f"Playing {title} at {url}")
-    print("Press Ctrl+C to stop.")
+    print(f"\n  {ui.PLAY}  playing {title}")
+    print(f"         {url}")
+    print("         (Ctrl+C to stop)\n")
     threading.Timer(0.5, webbrowser.open, [url]).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        pass
+        print(f"\n  {ui.BEAR}ﾉ  bye!\n")
     finally:
         server.server_close()
     return 0

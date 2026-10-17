@@ -184,7 +184,7 @@ def _write_record(writer: WARCWriter, response, body: bytes, content_type: str) 
     )
 
 
-def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, depth: int):
+def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, depth: int, log, progress):
     from playwright.sync_api import sync_playwright
 
     # The scope is set from where each start URL ends up after redirects (e.g. adding www.).
@@ -249,9 +249,11 @@ def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, dep
                         _write_record(writer, response, body, content_type)
                         written += 1
                     except Exception as error:  # noqa: BLE001
-                        print(f"    warn: {res_url} not recorded: {error}")
+                        log(f"    warn: {res_url} not recorded: {error}")
                 pending.clear()
+                progress(len(pages), written, stream.tell(), current)
 
+            current = ""
             while queue and len(pages) < page_limit:
                 url, level = queue.pop(0)
                 if url in visited_pages:
@@ -259,7 +261,9 @@ def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, dep
                 visited_pages.add(url)
 
                 page_title = url
-                print(f"  [{len(pages) + 1}] {url}")
+                current = url
+                progress(len(pages), written, stream.tell(), url)
+                log(f"  {len(pages) + 1:>3}  {url}")
                 try:
                     page.goto(url, wait_until="load", timeout=45000)
                     page.wait_for_timeout(1200)
@@ -267,7 +271,7 @@ def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: int, dep
                     page.wait_for_timeout(500)
                     page_title = page.title() or url
                 except Exception as error:  # noqa: BLE001
-                    print(f"    warn: {url} load warning: {error}")
+                    log(f"       could not fully load: {str(error).splitlines()[0]}")
 
                 landed = urldefrag(page.url).url
                 if landed != url:
@@ -315,14 +319,16 @@ class BrowserMissing(RuntimeError):
     """Playwright is installed but its Chromium is not."""
 
 
-def capture(seed_urls: list[str], out_path: Path, page_limit: int = 500, depth: int = 20) -> dict:
+def capture(seed_urls: list[str], out_path: Path, page_limit: int = 500, depth: int = 20,
+            log=print, progress=lambda *args: None) -> dict:
     """Capture one site, starting from seed_urls, into a WACZ at out_path.
+    log(line) prints a line; progress(pages, files, bytes, url) reports where it is.
     Returns counts: pages, resources, saved (bytes), left (pages found but over the limit)."""
     out_path = Path(out_path)
     with tempfile.TemporaryDirectory() as tmp:
         warc_path = Path(tmp) / "data.warc.gz"
         try:
-            count, pages, saved, left = _capture_to_warc(seed_urls, warc_path, page_limit, depth)
+            count, pages, saved, left = _capture_to_warc(seed_urls, warc_path, page_limit, depth, log, progress)
         except Exception as error:  # noqa: BLE001
             if "Executable doesn't exist" in str(error):
                 raise BrowserMissing(str(error)) from error

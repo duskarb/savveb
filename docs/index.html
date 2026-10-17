@@ -111,6 +111,34 @@
     .cmd button:hover { background: var(--mark); }
 
     .message { margin: auto; padding: 40px 16px; color: var(--muted); max-width: 560px; }
+
+    #stage { position: relative; }
+    .loader {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      place-content: center;
+      justify-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: var(--bg);
+      text-align: center;
+      transition: opacity 0.3s;
+    }
+    .loader[hidden] { display: none; }
+    .loader.fade { opacity: 0; pointer-events: none; }
+    .loader pre {
+      margin: 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-size: 26px;
+      line-height: 1;
+      white-space: pre;
+    }
+    .loader p { margin: 0; color: var(--muted); max-width: 420px; }
+    .loader p strong { color: var(--text); font-weight: 400; }
   </style>
 </head>
 <body>
@@ -148,7 +176,7 @@
           buttons of single-page apps — in a real browser, so JavaScript-heavy sites come out right.
           Runs on your computer; needs Python 3.9+ and <a href="https://pipx.pypa.io/">pipx</a>.</p>
         <div class="step">
-          <span>1. Install once</span>
+          <span>1. Install once <small>(no pipx? <code>brew install pipx</code> or <code>python3 -m pip install --user pipx</code>, then <code>pipx ensurepath</code>)</small></span>
           <div class="cmd"><code>pipx install git+https://github.com/duskarb/savveb</code><button type="button">Copy</button></div>
         </div>
         <div class="step">
@@ -166,7 +194,13 @@
 
     <!-- The player element must exist before the page finishes loading, or the runtime
          never initializes. It waits here, hidden, until a source is chosen. -->
-    <div class="frame" id="stage" hidden><replay-web-page id="player" replaybase="replay/"></replay-web-page></div>
+    <div class="frame" id="stage" hidden>
+      <replay-web-page id="player" replaybase="replay/"></replay-web-page>
+      <div class="loader" id="loader" role="status" aria-live="polite" hidden>
+        <pre id="bear" aria-hidden="true"></pre>
+        <p id="loader-text"></p>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -181,9 +215,67 @@
       $("frame").appendChild(box);
     }
 
+    // A bear paces while the archive opens (same bear as the savveb command line).
+    const loader = {
+      track: 8,
+      timer: null,
+      shownAt: 0,
+      frame(tick) {
+        const span = this.track * 2 - 2;
+        const step = tick % span;
+        const pos = step < this.track ? step : span - step;
+        const face = tick % 24 === 0 ? "ʕ-ᴥ-ʔ" : "ʕ•ᴥ•ʔ";
+        return " ".repeat(pos) + face + " ".repeat(this.track - 1 - pos);
+      },
+      show(name) {
+        clearInterval(this.timer);
+        this.shownAt = performance.now();
+        $("loader").hidden = false;
+        $("loader").classList.remove("fade");
+        const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        let tick = 0;
+        const draw = () => {
+          $("bear").textContent = still ? this.frame(this.track - 1) : this.frame(tick);
+          const waited = performance.now() - this.shownAt;
+          const dots = ".".repeat(1 + (Math.floor(tick / 4) % 3));
+          $("loader-text").innerHTML = "";
+          const strong = document.createElement("strong");
+          strong.textContent = name;
+          $("loader-text").append("opening ", strong, dots);
+          if (waited > 5000) $("loader-text").append(document.createElement("br"), "big archives take a moment");
+          tick += 1;
+        };
+        draw();
+        this.timer = setInterval(draw, 120);
+        // Never leave the bear in front forever; the player shows its own errors.
+        setTimeout(() => this.hide(), 15000);
+      },
+      hide() {
+        if ($("loader").hidden || this.failed) return;
+        // Keep the bear on screen briefly even when the archive opens instantly.
+        const wait = Math.max(0, 700 - (performance.now() - this.shownAt));
+        setTimeout(() => {
+          clearInterval(this.timer);
+          $("loader").classList.add("fade");
+          setTimeout(() => { $("loader").hidden = true; }, 300);
+        }, wait);
+      },
+      fail(text) {
+        this.failed = true;
+        clearInterval(this.timer);
+        $("download").hidden = true;
+        $("bear").textContent = "  ʕ ´•̥ᴥ•̥`ʔ  ";
+        $("loader-text").innerHTML = "";
+        const again = document.createElement("a");
+        again.href = "./";
+        again.textContent = "try another file";
+        $("loader-text").append(text, document.createElement("br"), again);
+      },
+    };
+
     // url = page inside the archive to open. Without it, ReplayWeb.page shows its
     // own page list and address bar, so every captured page can be browsed.
-    function play({ source, url = "", title = "", meta = "", download = "" }) {
+    async function play({ source, url = "", title = "", meta = "", download = "" }) {
       document.title = `${title || "Archive"} · savveb`;
       $("now").hidden = false;
       $("title").textContent = title || "Archive";
@@ -202,14 +294,34 @@
         message("The replay runtime (replay/ui.js) is missing.");
         return;
       }
+      $("home").hidden = true;
+      $("stage").hidden = false;
+      loader.show(title || "archive");
+
+      // The player sends no signal when a remote file is missing, so check it first.
+      if (/^https?:/.test(source)) {
+        try {
+          const response = await fetch(source, { headers: { Range: "bytes=0-0" } });
+          if (!response.ok) throw new Error(`the server answered ${response.status}`);
+        } catch (error) {
+          loader.fail(`couldn't open this file (${error.message === "Failed to fetch"
+            ? "not reachable, or the server doesn't allow other sites to read it (CORS)"
+            : error.message}).`);
+          return;
+        }
+      }
+
+      // A single page is ready when it finishes loading; the page list, when it appears.
       const player = $("player");
+      player.addEventListener("rwp-page-loading", (event) => {
+        if (url && event.detail && event.detail.loading === false) loader.hide();
+      });
+      player.addEventListener("rwp-url-change", () => { if (!url) loader.hide(); });
       if (url) {
         player.setAttribute("url", url);
         player.setAttribute("embed", "replayonly");
       }
       player.setAttribute("source", source);
-      $("home").hidden = true;
-      $("stage").hidden = false;
     }
 
     function formatSize(bytes) {

@@ -15,6 +15,9 @@ pipx install git+https://github.com/duskarb/savveb
 savveb save https://내-사이트.example/
 ```
 
+pipx가 없으면 `brew install pipx`(macOS) 또는 `python3 -m pip install --user pipx`로 설치하고
+`pipx ensurepath` 후 터미널을 새로 연다.
+
 현재 폴더에 `내-사이트.example-<날짜>.wacz`가 생긴다. 처음 실행할 때 Playwright용
 Chromium(약 100MB)을 한 번 설치할지 묻는다.
 

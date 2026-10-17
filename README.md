@@ -17,6 +17,9 @@ pipx install git+https://github.com/duskarb/savveb
 savveb save https://your-site.example/
 ```
 
+No pipx yet? `brew install pipx` (macOS) or `python3 -m pip install --user pipx`, then
+`pipx ensurepath` and open a new terminal.
+
 You get `your-site.example-<date>.wacz` in the current folder. The first run asks
 to install Playwright's Chromium (~100 MB) once.
 
