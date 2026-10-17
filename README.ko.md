@@ -28,7 +28,8 @@ savveb는 실제 브라우저로 각 페이지를 열고 스크롤하면서 브�
 링크, `sitemap.xml`, 그리고 주소를 바꾸는 메뉴 버튼을 눌러 보는 방식으로 찾는다
 (React, Next.js 같은 SPA는 일반 링크가 없는 경우가 많다). 그래도 빠지는 페이지가 있으면
 주소를 더 적으면 된다: `savveb save https://사이트/ https://사이트/숨은-페이지`
-광고, 방문자 분석, 추적 스크립트는 받지 않는다. 저장을 느리게 하고 파일만 키우며,
+화면 크기별 이미지(`srcset`)는 어떤 화면에서 재생해도 보이도록 저장한다. 한 벌만 저장하고
+나머지 크기는 그 파일을 가리키게 한다. 광고, 방문자 분석, 추적 스크립트는 받지 않는다. 저장을 느리게 하고 파일만 키우며,
 아카이브에서는 어차피 동작하지 않기 때문이다.
 
 | 옵션 | 기본값 | |
@@ -62,4 +63,5 @@ WARC(ISO 28500), 색인, 체크섬이 든 zip이다. 다른 파일처럼 폴더,
 
 MIT(`LICENSE`). `docs/replay/`의 재생기는 Webrecorder의
 [ReplayWeb.page](https://github.com/webrecorder/replayweb.page) 2.4.6이며
-AGPL-3.0-or-later(`docs/replay/LICENSE.replaywebpage.txt`)로, 수정 없이 포함했다.
+AGPL-3.0-or-later(`docs/replay/LICENSE.replaywebpage.txt`)이며, 작은 수정 하나를
+`docs/replay/README.md`에 적어 두었다.

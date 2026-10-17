@@ -98,6 +98,56 @@ async () => {
 """
 
 
+# Every image size a page offers. Browsers pick one file from srcset by screen width
+# and pixel density, so replay on another screen asks for a file the capture never
+# loaded. Each srcset becomes a group: savveb saves one file and records the other
+# sizes as redirects to it, so any choice works without storing every size.
+# If the browser already loaded one size, that one is kept instead of the largest.
+# Lazy-load attributes (data-src...) are listed as single images.
+_IMAGE_CANDIDATES = """
+() => {
+  const abs = (u) => { try { return u && !u.startsWith('data:') ? new URL(u, document.baseURI).href : null; } catch (e) { return null; } };
+  // srcset grammar: URL [descriptor], ... ; URLs may contain commas, descriptors may not.
+  const parseSrcset = (value) => {
+    const out = [];
+    let i = 0;
+    while (i < value.length) {
+      while (i < value.length && /[\s,]/.test(value[i])) i++;
+      let j = i;
+      while (j < value.length && !/\s/.test(value[j])) j++;
+      let url = value.slice(i, j);
+      const bare = url.endsWith(',');
+      url = url.replace(/,+$/, '');
+      i = j;
+      let descriptor = '';
+      if (!bare) { const k = i; while (i < value.length && value[i] !== ',') i++; descriptor = value.slice(k, i).trim(); }
+      const m = descriptor.match(/([\d.]+)([wx])/);
+      const size = m ? parseFloat(m[1]) * (m[2] === 'x' ? 10000 : 1) : 0;
+      const href = abs(url);
+      if (href) out.push([href, size]);
+    }
+    return out;
+  };
+  const groups = [], singles = new Set();
+  for (const el of document.querySelectorAll('img, source')) {
+    const group = [];
+    for (const attr of ['srcset', 'data-srcset']) {
+      const v = el.getAttribute(attr);
+      if (v) group.push(...parseSrcset(v));
+    }
+    for (const attr of ['src', 'data-src', 'data-lazy-src', 'data-original']) {
+      const href = abs(el.getAttribute(attr));
+      // With a srcset, src is only a fallback: it joins the group as the smallest size.
+      if (href) group.length ? group.push([href, 0]) : singles.add(href);
+    }
+    if (group.length) groups.push(group);
+  }
+  const ok = (u) => /^https?:/.test(u);
+  return {groups: groups.map(g => g.filter(([u]) => ok(u))).filter(g => g.length), singles: [...singles].filter(ok)};
+}
+"""
+
+
 async def _settle(page, timeout: int) -> None:
     """Wait until the network goes quiet, but never longer than timeout ms
     (sites with analytics or polling never go fully quiet)."""
@@ -303,16 +353,69 @@ async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: in
         async def save_download(context, url: str) -> None:
             """Fetch url directly and record it: files such as PDFs make the browser
             download instead of showing a page, and some bodies never reach the page."""
-            if url in seen_resources:
+            if url in seen_resources or url in fetching:
                 return
+            fetching.add(url)
             try:
-                response = await context.request.get(url, timeout=60000)
+                try:
+                    response = await context.request.get(url, timeout=60000)
+                except Exception:  # noqa: BLE001 (servers sometimes drop busy connections)
+                    await asyncio.sleep(1)
+                    response = await context.request.get(url, timeout=60000)
                 fetched = _Fetched(response, await response.body())
-                _write_record(writer, fetched, fetched.body, response.headers.get("content-type", ""))
+                body, content_type = fetched.body, response.headers.get("content-type", "")
+                if _OPTIMIZE and len(body) >= _OPT_MIN_BYTES:
+                    body, content_type = await asyncio.to_thread(_optimize_image, content_type, body)
+                    counts["saved"] += len(fetched.body) - len(body)
+                _write_record(writer, fetched, body, content_type)
                 counts["written"] += 1
                 seen_resources.add(url)
             except Exception as error:  # noqa: BLE001
                 log(f"       could not download {url}: {str(error).splitlines()[0]}")
+            finally:
+                fetching.discard(url)
+
+        fetch_slots = asyncio.Semaphore(6)
+
+        async def save_all(urls: list[str]) -> None:
+            """Fetch and record the urls not saved yet, a few at a time."""
+            async def one(url: str) -> None:
+                async with fetch_slots:
+                    await save_download(context_ref[0], url)
+            todo = [u for u in dict.fromkeys(urls) if u not in seen_resources and u not in fetching]
+            if todo:
+                await asyncio.gather(*(one(u) for u in todo))
+                report()
+
+        context_ref: list = []
+
+        def save_redirect(url: str, target: str) -> None:
+            """Record url as a redirect to target (another size of the same image)."""
+            if url in seen_resources or url in fetching:
+                return
+            headers = StatusAndHeaders("302 Found", [("Location", target), ("Content-Length", "0")],
+                                       protocol="HTTP/1.1")
+            writer.write_record(writer.create_warc_record(url, "response", payload=BytesIO(b""),
+                                                          http_headers=headers))
+            counts["written"] += 1
+            seen_resources.add(url)
+
+        async def save_images(images: dict) -> None:
+            largest = {}
+            for group in images["groups"]:
+                group = [(u, size) for u, size in group if not _TRACKERS.search(u)]
+                if not group:
+                    continue
+                # Prefer a size the browser already loaded; otherwise fetch the largest.
+                have = [item for item in group if item[0] in seen_resources]
+                best = max(have or group, key=lambda item: item[1])[0]
+                for u, _ in group:
+                    largest[u] = best
+            singles = [u for u in images["singles"] if not _TRACKERS.search(u) and u not in largest]
+            await save_all(list(dict.fromkeys(largest.values())) + singles)
+            for u, best in largest.items():
+                if u != best and best in seen_resources:
+                    save_redirect(u, best)
 
         async def visit(context, page, pending: list, url: str, level: int) -> None:
             number = counts["started"]
@@ -345,6 +448,11 @@ async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: in
                 for target in await _sitemap_urls(context, landed):
                     enqueue(target, 1)
 
+            try:
+                images = await page.evaluate(_IMAGE_CANDIDATES)
+            except Exception:  # noqa: BLE001
+                images = {"groups": [], "singles": []}
+
             pages.append({
                 "id": hashlib.sha1(landed.encode()).hexdigest()[:16],
                 "url": landed,
@@ -352,6 +460,7 @@ async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: in
                 "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             })
             await flush(pending)
+            await save_images(images)
 
             if level < depth:
                 try:
@@ -394,6 +503,7 @@ async def _capture_to_warc(seed_urls: list[str], warc_path: Path, page_limit: in
                 )
             )
             await context.route(_TRACKERS, lambda route: route.abort())
+            context_ref.append(context)
             tabs = [await context.new_page() for _ in range(max(1, parallel))]
             # Buttons that open new tabs or windows are not followed.
             context.on("page", lambda popup: None if popup in tabs else asyncio.ensure_future(popup.close()))

@@ -31,7 +31,8 @@ pages under the starting URL's path by following links, reading `sitemap.xml`, a
 clicking menu buttons that change the address (single-page apps built with React,
 Next.js and similar often have no ordinary links). If a page still gets missed, add
 its address: `savveb save https://site.example/ https://site.example/hidden-page`.
-Ads, analytics and trackers are skipped: they make saving slower and files bigger,
+Responsive images (`srcset`) are saved so they show at any screen size: one file is
+kept and the other sizes point to it. Ads, analytics and trackers are skipped: they make saving slower and files bigger,
 and don't work in an archive anyway.
 
 | Option | Default | |
@@ -78,4 +79,5 @@ player for `savveb play`.
 
 MIT (`LICENSE`). The player in `docs/replay/` is
 [ReplayWeb.page](https://github.com/webrecorder/replayweb.page) 2.4.6 by Webrecorder,
-AGPL-3.0-or-later (`docs/replay/LICENSE.replaywebpage.txt`), included unmodified.
+AGPL-3.0-or-later (`docs/replay/LICENSE.replaywebpage.txt`), with one small fix described in
+`docs/replay/README.md`.

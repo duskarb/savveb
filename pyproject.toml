@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "savveb"
-version = "0.2.0"
+version = "0.3.0"
 description = "Save a website as a WACZ file and replay it anywhere."
 readme = "README.md"
 license = "MIT"
